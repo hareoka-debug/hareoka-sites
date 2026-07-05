@@ -1,0 +1,145 @@
+{
+  "app_name": "Rutas Rapa Nui",
+  "personality": "3 Editorial Mobile LIGHT",
+  "personality_one_liner": "A premium, Nat-Geo-style travel guide that respects the ancient history of Rapa Nui with earthy tones, elegant serif typography, and immersive imagery.",
+  "color": {
+    "surface": "#F9F8F6",
+    "onSurface": "#2B3A42",
+    "surfaceSecondary": "#F2F0EB",
+    "onSurfaceSecondary": "#3D4E56",
+    "surfaceTertiary": "#E8E5DF",
+    "onSurfaceTertiary": "#4F636C",
+    "surfaceInverse": "#2B3A42",
+    "onSurfaceInverse": "#F9F8F6",
+    "brand": "#B35D4A",
+    "brandPrimary": "#B35D4A",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#8A4A3B",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#E6D5CF",
+    "onBrandTertiary": "#8A4A3B",
+    "success": "#4A6B53",
+    "onSuccess": "#FFFFFF",
+    "warning": "#D4A373",
+    "onWarning": "#2B3A42",
+    "error": "#9E4747",
+    "onError": "#FFFFFF",
+    "info": "#607D8B",
+    "onInfo": "#FFFFFF",
+    "border": "#E8E5DF",
+    "borderStrong": "#D1CCC2",
+    "divider": "#E8E5DF"
+  },
+  "typography": {
+    "displayFontFamily": "Fraunces",
+    "textFontFamily": "Satoshi",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Use editorial, magazine-like rhythms. Generous vertical breathing room. Allow whitespace to guide the reader.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": 0,
+  "navigation": "stack_only",
+  "icon_set": "Feather",
+  "glassmorphism": {
+    "enabled": false,
+    "do's": ["Skip glassmorphism entirely to match the Editorial Mobile LIGHT and natural aesthetic."],
+    "dont's": ["Do not use blur or glass panels."]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Paywall",
+      "purpose": "A premium landing screen that promises value and captures the one-time $2,000 CLP payment via Stripe.",
+      "states": {
+        "loading": "Centered minimalist spinner with 'Verificando...'",
+        "empty": "N/A",
+        "error": "Message 'Error de conexión. Intenta de nuevo.' with Retry button."
+      },
+      "layout": "Full-bleed hero image of Moais with a top-to-bottom gradient scrim (transparent to surfaceInverse). At the bottom 40%: Oversized serif headline 'Descubre Rapa Nui'. Below it, 3 bullet points of value (Rutas completas, Puntos Vai, Mapas interactivos). Sticky primary CTA 'Desbloquear Guía - $2.000 CLP' at the bottom safe area."
+    },
+    {
+      "name": "HomeMap",
+      "purpose": "Interactive map of the island with a collapsible bottom sheet containing the list of routes.",
+      "states": {
+        "loading": "Map skeleton or spinner over surfaceSecondary.",
+        "empty": "No routes found for the selected filter.",
+        "error": "Failed to load map data. Retry button."
+      },
+      "layout": "Full-screen interactive map (react-native-maps) showing route polylines and Moai/Vai markers. A persistent Bottom Sheet (@gorhom/bottom-sheet) sits over the map. The sheet header has filter pills ('Urbana', 'Rural', 'Todas'). The sheet body contains a vertical list of route cards. Each card has a thumbnail photo, title, distance, and difficulty."
+    },
+    {
+      "name": "RouteDetail",
+      "purpose": "Comprehensive guide for a specific route, including infographics, description, POIs, and 'Vai' hydration tips.",
+      "states": {
+        "loading": "Skeleton layout for hero image and text blocks.",
+        "empty": "N/A",
+        "error": "Failed to load route details. Retry button."
+      },
+      "layout": "Scrollable view. Top: Hero image with a gradient scrim and the route's title overlaid in serif. Below hero: A clean infographics row (icons + text for distance, time, difficulty). Followed by a generous text description of the route. Section: 'Puntos de Interés' with a list of locations. Section: 'Puntos Vai & Hidratación' with a tinted brandTertiary background card suggesting where to buy native water and hydration tips for the trail. Sticky 'Ver en el Mapa' CTA at the bottom."
+    }
+  ],
+  "images": {
+    "paywall_hero": {
+      "url": "https://images.unsplash.com/photo-1597240890437-6d9c2d4c16aa?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NDh8MHwxfHNlYXJjaHwxfHxFYXN0ZXIlMjBJc2xhbmQlMjBNb2FpJTIwc3RhdHVlJTIwbGFuZHNjYXBlfGVufDB8fHx8MTc4MzI4MzEyNXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Moai statues at Easter Island"
+    },
+    "route_placeholder": {
+      "url": "https://images.unsplash.com/photo-1782805332884-77a512becad7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTV8MHwxfHNlYXJjaHwxfHxSYXBhJTIwTnVpJTIwbGFuZHNjYXBlJTIwaGlrZSUyMHRyYWlsfGVufDB8fHx8MTc4MzI4MzEyNnww&ixlib=rb-4.1.0&q=85",
+      "alt": "Rapa Nui coastal landscape"
+    },
+    "vai_water_concept": {
+      "url": "https://images.unsplash.com/photo-1763490538690-5089ad94fc6b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHxmcmVzaCUyMHNwcmluZyUyMHdhdGVyJTIwbmF0dXJhbCUyMHN0cmVhbXxlbnwwfHx8fDE3ODMyODMxMjV8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Fresh natural spring water"
+    }
+  },
+  "instructions_to_main_agent": [
+    "ALL UI TEXT MUST BE IN SPANISH.",
+    "Do NOT use indigo, violet, blue, or purple in any form. Use the provided earthy Rapa Nui palette (terracotta, slate, ivory).",
+    "App must not require user accounts. The Stripe payment is a device-based one-time unlock.",
+    "Build a realistic Paywall screen with a hardcoded $2,000 CLP payment flow (mock Stripe integration visually, or use real Stripe elements if instructed).",
+    "For the map, use react-native-maps. Place custom markers for points of interest (Moai sites, Vai water points).",
+    "Use @gorhom/bottom-sheet for the Home map overlay to show the list of routes.",
+    "On the RouteDetail screen, dedicate a specific prominent UI section (perhaps a tinted card) for 'Puntos Vai & Hidratación', offering tips and locations to buy native water.",
+    "Always apply a top-to-bottom gradient scrim (transparent to surfaceInverse) over hero images when placing text on top.",
+    "Use Fraunces (or equivalent serif) for major headings to give a premium Nat Geo editorial feel, and Satoshi for body text.",
+    "No glassmorphism. This is a matte, editorial-style app. Rely on solid colors, fine borders, and generous spacing.",
+    "Ensure touch targets are at least 44x44pt. Use hitSlop."
+  ],
+  "haptics": {
+    "paywall_cta_press": "impactMedium",
+    "filter_pill_toggle": "impactLight",
+    "route_card_press": "impactLight",
+    "bottom_sheet_drag": "selection"
+  }
+}
