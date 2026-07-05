@@ -1,0 +1,40 @@
+{
+  "summary": "First iteration testing. Backend + frontend both PASS end-to-end. 9/9 pytest cases pass: GET /api/routes returns 11 routes; ?type=urbana returns 3, ?type=rural returns 8; GET /api/routes/rano-kau-orongo returns full detail with path/pois/vai; GET /api/routes/inexistente returns 404; GET /api/water-points returns 5; POST /api/payments/checkout returns checkout.stripe.com URL and session_id and persists payment_transactions doc with amount_clp=2000, currency='clp', payment_status='pending'; GET /api/payments/status/{sid} returns unpaid before payment; GET /api/payments/access/{device_id} returns has_access=false for new device. Verified via Mongo that the persisted document exactly matches (amount_clp=2000, payment_status=pending, currency=clp). Frontend: paywall renders correctly with 'Descubre Rapa Nui', $2.000 CLP unlock CTA (testID unlock-button). 'Restaurar acceso' shows 'No encontramos un pago para este dispositivo.' Access guard: navigating directly to /map with cleared localStorage redirects to '/'. Unlock button navigates to Stripe checkout which correctly displays 'CLP 2,000'. Completed real test payment with 4242 4242 4242 4242 -> Stripe redirects to /payment-success?session_id=..., page polls /api/payments/status and shows '¡Iorana! Pago exitoso' with start-exploring CTA. Clicking start-exploring navigates to /map. /map shows SVG island map with drawn routes, bottom sheet with 11 route cards, and working filters (Todas/Urbanas/Rurales) — urbana filter shows 3 cards, rural shows 8. Tapping route-card-circuito-hanga-roa opens /route/circuito-hanga-roa with hero image, distancia/duración/dificultad infographic, description, 'Puntos de Interés' section and 'Puntos Vai & Hidratación' section. 'Ver en el Mapa' (view-on-map) navigates back to /map?selected=circuito-hanga-roa. Currency displayed by Stripe: CLP 2,000 as expected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "React 19 ref deprecation", "issue": "Console error: 'Accessing element.ref was removed in React 19. ref is now a regular prop.' Emitted twice on paywall load. Likely originates from a third-party lib (bottom sheet / reanimated / gorhom) still using legacy ref access. Non-blocking but should be tracked; upgrade the affected library once patched."},
+      {"component": "pointerEvents deprecation", "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' — again from a third-party RN lib. Non-blocking."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Optional: bump/patch the bottom-sheet / reanimated dependency that emits the React 19 element.ref console error (not blocking, but should be addressed to keep logs clean).",
+    "Optional: switch component using props.pointerEvents to style.pointerEvents (probably inside a dependency)."
+  ],
+  "critical_code_review_comments": [
+    "server.py correctly uses PRICE_AMOUNT_FOR_LIB=20.0 with currency='clp' so the emergentintegrations library multiplies by 100 to produce 2000 CLP (verified visually on the Stripe checkout page).",
+    "MongoDB ObjectId (_id) is never returned from endpoints since responses only include ROUTES/WATER_POINTS constants and cleanly built dicts; payment_transactions is not read back via API.",
+    "Access guard is implemented both at Paywall (redirects to /map if paid) and at MapScreen (redirects to / if not paid) — double-checked and works.",
+    "All interactive UI elements have testID (unlock-button, start-exploring, filter-todas/urbana/rural, route-card-*, route-pin-*, view-on-map, selected-route-banner)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/__init__.py (created)",
+    "/app/backend/tests/backend_test.py (created)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None persisted. Test payment_transactions with device_id prefixed 'TEST_' were created during pytest and full-flow tests and then cleaned up. One real Stripe test payment (test card 4242) was executed against the sandbox test key and remains as a paid doc for one throwaway device_id issued in-browser — safe to leave.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Public URL: EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env (https://rapa-nui-routes.preview.emergentagent.com). Backend tests live at /app/backend/tests/backend_test.py. Frontend uses AsyncStorage-backed device_id (localStorage on web); to re-test guard, clear localStorage before navigating to /map. Stripe test card 4242 4242 4242 4242 with any future expiry, CVC 123, ZIP 12345 completes payment. Stripe checkout page displays 'CLP 2,000' confirming currency+amount are correct.",
+  "rca_of_issue": "No functional issue found."
+}
