@@ -35,7 +35,7 @@
 ## Estado
 - [x] Backend rutas + pagos implementado y verificado con curl (checkout crea sesión Stripe real de prueba)
 - [x] Frontend completo (paywall, mapa, detalle, éxito de pago)
-- [ ] Testing e2e (testing_agent)
+- [x] Testing e2e (iteración 1: 9/9 backend PASS, todos los flujos frontend PASS incl. pago real de prueba con tarjeta 4242 — Stripe mostró CLP 2.000 correcto)
 
 ## Notas
 - STRIPE_API_KEY agregada a /app/backend/.env ("sk_test_emergent").
