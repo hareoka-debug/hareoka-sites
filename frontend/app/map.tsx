@@ -34,6 +34,20 @@ import { colors, difficultyColor, radius, serif, spacing } from "@/src/lib/theme
 const ON_ISLAND = (lat: number, lng: number) =>
   lat <= -27.02 && lat >= -27.22 && lng >= -109.49 && lng <= -109.2;
 
+// Distancia haversine en km
+const distanceKm = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const formatDistance = (km: number) =>
+  km < 1 ? `a ${Math.round(km * 1000)} m de ti` : `a ${km.toFixed(1).replace(".", ",")} km de ti`;
+
 type Filter = "todas" | "urbana" | "rural";
 
 const FILTERS: { key: Filter; label: string }[] = [
@@ -168,7 +182,11 @@ export default function MapScreen() {
     beginTracking();
   };
 
-  const renderCard = ({ item }: { item: RouteData }) => (
+  const renderCard = ({ item }: { item: RouteData }) => {
+    const dist = coords
+      ? distanceKm(coords.lat, coords.lng, item.path[0][0], item.path[0][1])
+      : null;
+    return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
       onPress={() => {
@@ -204,6 +222,12 @@ export default function MapScreen() {
               : `${item.duration_min} min`}
           </Text>
         </View>
+        {dist !== null ? (
+          <View style={styles.cardMeta}>
+            <Feather name="navigation" size={12} color={colors.info} />
+            <Text style={styles.distText}>Inicio {formatDistance(dist)}</Text>
+          </View>
+        ) : null}
       </View>
       <Pressable
         hitSlop={8}
@@ -214,7 +238,8 @@ export default function MapScreen() {
         <Feather name="map-pin" size={18} color={colors.brand} />
       </Pressable>
     </Pressable>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -447,6 +472,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontFamily: serif, fontSize: 16, color: colors.onSurface },
   cardMeta: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   metaText: { fontSize: 12, color: colors.onSurfaceTertiary, marginRight: spacing.sm },
+  distText: { fontSize: 12, color: colors.info, fontWeight: "600" },
   pinBtn: {
     width: 44,
     height: 44,
