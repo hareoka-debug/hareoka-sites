@@ -32,6 +32,16 @@
 - GET /api/payments/access/{device_id}
 - POST /api/webhook/stripe
 
+## Pagos multi-proveedor (iteración 2 — TESTED 20/20 backend + e2e frontend PASS)
+- POST /api/payments/checkout {device_id, origin_url, provider: stripe|mercadopago|flow, email?} → {url, tx_id, session_id}
+- GET /api/payments/providers → disponibilidad + price_clp (3000)
+- GET /api/payments/status/{tx_id} → acepta tx_id interno o session_id; branch por provider
+- Webhooks: /api/webhook/stripe, /api/webhook/mercadopago, /api/webhook/flow; retorno Flow: /api/payments/flow/return (POST→303 redirect)
+- Mercado Pago: Access Token de PRODUCCIÓN del usuario en backend/.env (MP_ACCESS_TOKEN, APP_USR-...). Preferencias verificadas OK. Los pagos caen en su cuenta MP.
+- Flow: PENDIENTE credenciales del usuario (FLOW_API_KEY/FLOW_SECRET_KEY vacías en .env; FLOW_API_URL=https://www.flow.cl/api, cambiar a sandbox.flow.cl/api para pruebas). La UI oculta Flow hasta configurarlo.
+- Paywall: selector de método (testID method-*), input email para Flow, precio $3.000 CLP.
+- NOTA entorno: expo --tunnel requiere @expo/ngrok instalado globalmente (sudo npm i -g @expo/ngrok); se reinstaló tras reinicio del pod.
+
 ## Estado
 - [x] Backend rutas + pagos implementado y verificado con curl (checkout crea sesión Stripe real de prueba)
 - [x] Frontend completo (paywall, mapa, detalle, éxito de pago)
