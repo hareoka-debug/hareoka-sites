@@ -9,13 +9,14 @@ import { colors, radius, serif, spacing } from "@/src/lib/theme";
 const MAX_ATTEMPTS = 10;
 
 export default function PaymentSuccess() {
-  const { session_id } = useLocalSearchParams<{ session_id: string }>();
+  const params = useLocalSearchParams<{ tx?: string; session_id?: string }>();
+  const txId = params.tx || params.session_id;
   const router = useRouter();
   const [state, setState] = useState<"verifying" | "paid" | "expired" | "error">("verifying");
   const attempts = useRef(0);
 
   useEffect(() => {
-    if (!session_id) {
+    if (!txId) {
       setState("error");
       return;
     }
@@ -25,7 +26,7 @@ export default function PaymentSuccess() {
       if (cancelled) return;
       attempts.current += 1;
       try {
-        const st = await checkPaymentStatus(session_id);
+        const st = await checkPaymentStatus(txId);
         if (cancelled) return;
         if (st.payment_status === "paid") {
           await setLocalPaid();
@@ -52,7 +53,7 @@ export default function PaymentSuccess() {
     return () => {
       cancelled = true;
     };
-  }, [session_id]);
+  }, [txId]);
 
   return (
     <View style={styles.container}>

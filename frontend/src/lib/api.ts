@@ -74,16 +74,33 @@ export async function checkAccess(deviceId: string): Promise<boolean> {
   return data.has_access;
 }
 
-export async function createCheckout(deviceId: string, originUrl: string) {
+export interface Providers {
+  stripe: boolean;
+  mercadopago: boolean;
+  flow: boolean;
+  price_clp: number;
+}
+
+export const fetchProviders = () => get<Providers>("/payments/providers");
+
+export async function createCheckout(
+  deviceId: string,
+  originUrl: string,
+  provider: string,
+  email?: string,
+) {
   const res = await fetch(`${BASE}/api/payments/checkout`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ device_id: deviceId, origin_url: originUrl }),
+    body: JSON.stringify({ device_id: deviceId, origin_url: originUrl, provider, email }),
   });
-  if (!res.ok) throw new Error(`Error ${res.status}`);
-  return res.json() as Promise<{ url: string; session_id: string }>;
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.detail || `Error ${res.status}`);
+  }
+  return res.json() as Promise<{ url: string; tx_id: string }>;
 }
 
-export async function checkPaymentStatus(sessionId: string) {
-  return get<{ status: string; payment_status: string }>(`/payments/status/${sessionId}`);
+export async function checkPaymentStatus(txId: string) {
+  return get<{ status: string; payment_status: string }>(`/payments/status/${txId}`);
 }

@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 2 testing (both backend + frontend). ALL PASS. Backend: 20/20 pytest cases pass. GET /api/payments/providers returns {stripe:true, mercadopago:true, flow:false, price_clp:3000}. POST /api/payments/checkout: default provider = stripe returns checkout.stripe.com URL + tx_id + session_id and persists doc with amount_clp=3000, currency='clp', provider='stripe', payment_status='pending' (verified in Mongo). provider=mercadopago returns https://www.mercadopago.cl/... init_point + tx_id + session_id (preference created; PRODUCTION token NOT charged). provider=flow -> 503 'Flow no está configurado aún' (with and without email). provider='paypal' -> 400. GET /api/payments/status/{tx_id} accepts BOTH internal tx_id AND session_id: for stripe returns unpaid; for mercadopago returns payment_status='unpaid' via /v1/payments/search; unknown id -> 404. Routes/water-points regression OK (11 routes, 3 urbanas, 8 rurales, 5 water points). Frontend: paywall renders 'ELIGE TU MEDIO DE PAGO' label with 'Mercado Pago' and 'Tarjeta int.' cards (Flow HIDDEN because providers.flow=false), CTA shows 'Desbloquear Guía — $3.000 CLP'. testID method-mercadopago / method-stripe / unlock-button all present and tappable. Selecting method-mercadopago + tapping unlock-button redirects to mercadopago.cl/checkout/v1/payment/redirect/... (NOT completed - production credentials). Selecting method-stripe + tapping unlock-button opens Stripe checkout displaying 'CLP 3,000' correctly; completed real test payment with 4242 4242 4242 4242 -> Stripe redirects to /payment-success?tx=<uuid> (new ?tx= param, no session_id in URL) -> polling /api/payments/status/{tx_id} returns paid -> screen shows '¡Iorana! Pago exitoso' with testID start-exploring. Tapping start-exploring navigates to /map showing the 11 route cards (Circuito Histórico de Hanga Roa, Costanera Policarpo Toro, Sendero Ana Kai Tangata, etc.) with Todas/Urbanas/Rurales filters. Access guard: navigating to /map with cleared localStorage redirects back to paywall (/). React Native issues detected: existing pointerEvents deprecation warning and React 19 element.ref removal warning still emitted from third-party libs (same as iteration 1) — non-blocking.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "React 19 element.ref removal", "issue": "Console error 'Accessing element.ref was removed in React 19. ref is now a regular prop.' emitted on paywall and /map load; originates from third-party lib (bottom sheet / reanimated). Non-blocking; existed in iteration 1."},
+      {"component": "props.pointerEvents deprecation", "issue": "Console warning 'props.pointerEvents is deprecated. Use style.pointerEvents' — from a third-party RN lib. Non-blocking; existed in iteration 1."},
+      {"component": "TouchableMixin deprecation", "issue": "Console warning 'TouchableMixin is deprecated. Please use Pressable.' emitted on /map; likely from a third-party dependency. Non-blocking."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "No functional issues. Optional (carried from iter 1): bump/patch third-party libs emitting React 19 element.ref, pointerEvents, and TouchableMixin deprecation warnings for cleaner console."
+  ],
+  "critical_code_review_comments": [
+    "Price is now $3.000 CLP consistently: PRICE_CLP_DISPLAY=3000 and PRICE_AMOUNT_FOR_STRIPE_LIB=30.0 (lib multiplies by 100 -> 3000 CLP shown as 'CLP 3,000' in Stripe checkout - visually verified).",
+    "Status endpoint accepts both tx_id and session_id via {'$or':[{id:tx_id},{session_id:tx_id}]} - both branches tested for Stripe and MP.",
+    "success_url now uses ?tx={tx_id} for both Stripe and MP; payment-success.tsx correctly reads params.tx || params.session_id for backwards compatibility.",
+    "Flow endpoint returns 503 as designed when FLOW_API_KEY/FLOW_SECRET_KEY are empty; provider validation returns 400 for unknown providers.",
+    "All interactive UI elements have testID: method-mercadopago, method-stripe, method-flow (hidden), flow-email-input, unlock-button, start-exploring.",
+    "MongoDB ObjectId is never returned by API endpoints (payment_transactions is only written / queried internally)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (rewritten for iteration 2: 20 tests covering providers metadata, stripe/MP/flow/invalid checkout, status lookup by tx_id and session_id, 404 for unknown, access guard)"
+  ],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "100%"},
+  "seed_data_creation": "Created a handful of TEST_-prefixed payment_transactions docs (stripe pending, mercadopago pending). One real Stripe test payment with card 4242 completed for a throwaway browser-issued device_id (paid doc) -- safe to leave. NO MercadoPago real payment was completed (production credentials).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Public URL from /app/frontend/.env: EXPO_PUBLIC_BACKEND_URL=https://rapa-nui-routes.preview.emergentagent.com. Backend tests at /app/backend/tests/backend_test.py (pytest 20 tests). MP_ACCESS_TOKEN is a PRODUCTION token - creating preferences is fine but NEVER complete a MP payment via mercadopago.cl. Stripe uses sk_test_emergent (safe to complete with 4242 4242 4242 4242). FLOW_API_KEY/FLOW_SECRET_KEY are empty so Flow endpoint returns 503 and Flow method card is hidden in UI. Payment success URL format is /payment-success?tx=<uuid>.",
+  "rca_of_issue": "No issues to RCA. Iteration 2 changes (price 3000, provider selector, status by tx_id or session_id, ?tx= param) all working correctly end-to-end."
+}

@@ -1,9 +1,14 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import hashlib
+import hmac
+import json
 import logging
+import httpx
 from pathlib import Path
 from pydantic import BaseModel
 import uuid
@@ -57,18 +62,26 @@ async def get_water_points():
     return WATER_POINTS
 
 
-# ---------------- Pagos (Stripe) ----------------
-# Precio fijo definido en el servidor: $3.000 CLP (CLP es moneda sin decimales;
-# la librería multiplica amount * 100, por lo que 30.0 -> unit_amount 3000 CLP).
+# ---------------- Pagos (Stripe + Mercado Pago + Flow) ----------------
+# Precio fijo definido en el servidor: $3.000 CLP.
+# Stripe: la librería multiplica amount * 100, por lo que 30.0 -> unit_amount 3000 CLP.
 PRICE_CLP_DISPLAY = 3000
-PRICE_AMOUNT_FOR_LIB = 30.0
+PRICE_AMOUNT_FOR_STRIPE_LIB = 30.0
 
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
+MP_ACCESS_TOKEN = os.environ.get("MP_ACCESS_TOKEN", "")
+FLOW_API_KEY = os.environ.get("FLOW_API_KEY", "")
+FLOW_SECRET_KEY = os.environ.get("FLOW_SECRET_KEY", "")
+FLOW_API_URL = os.environ.get("FLOW_API_URL", "https://www.flow.cl/api").rstrip("/")
+
+logger = logging.getLogger(__name__)
 
 
 class CheckoutRequest(BaseModel):
     device_id: str
     origin_url: str
+    provider: str = "stripe"  # stripe | mercadopago | flow
+    email: str | None = None  # requerido por Flow
 
 
 def _stripe(request: Request) -> StripeCheckout:
@@ -76,56 +89,203 @@ def _stripe(request: Request) -> StripeCheckout:
     return StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=f"{host_url}/api/webhook/stripe")
 
 
+def _flow_sign(params: dict) -> str:
+    items = sorted((k, v) for k, v in params.items() if k != "s")
+    message = "".join(f"{k}{v}" for k, v in items)
+    return hmac.new(FLOW_SECRET_KEY.encode(), message.encode(), hashlib.sha256).hexdigest()
+
+
+async def _flow_call(service: str, params: dict, method: str = "post") -> dict:
+    params = {**params, "apiKey": FLOW_API_KEY}
+    params["s"] = _flow_sign(params)
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        if method == "get":
+            resp = await client.get(f"{FLOW_API_URL}/{service}", params=params)
+        else:
+            resp = await client.post(f"{FLOW_API_URL}/{service}", data=params)
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def _mp_get(path: str, params: dict | None = None) -> dict:
+    headers = {"Authorization": f"Bearer {MP_ACCESS_TOKEN}"}
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        resp = await client.get(f"https://api.mercadopago.com{path}", params=params, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+
+@api_router.get("/payments/providers")
+async def payment_providers():
+    return {
+        "stripe": bool(STRIPE_API_KEY),
+        "mercadopago": bool(MP_ACCESS_TOKEN),
+        "flow": bool(FLOW_API_KEY and FLOW_SECRET_KEY),
+        "price_clp": PRICE_CLP_DISPLAY,
+    }
+
+
 @api_router.post("/payments/checkout")
 async def create_payment_checkout(body: CheckoutRequest, request: Request):
     origin = body.origin_url.rstrip("/")
-    stripe_checkout = _stripe(request)
-    try:
-        session = await stripe_checkout.create_checkout_session(
-            CheckoutSessionRequest(
-                amount=PRICE_AMOUNT_FOR_LIB,
-                currency="clp",
-                success_url=f"{origin}/payment-success?session_id={{CHECKOUT_SESSION_ID}}",
-                cancel_url=f"{origin}/",
-                metadata={"device_id": body.device_id, "product": "guia_rapa_nui"},
-            )
-        )
-    except Exception as e:
-        logging.getLogger(__name__).error(f"Stripe checkout error: {e}")
-        raise HTTPException(status_code=502, detail="No se pudo iniciar el pago")
-
-    await db.payment_transactions.insert_one({
-        "id": str(uuid.uuid4()),
-        "session_id": session.session_id,
+    host_url = str(request.base_url).rstrip("/")
+    tx_id = str(uuid.uuid4())
+    doc = {
+        "id": tx_id,
+        "provider": body.provider,
         "device_id": body.device_id,
+        "origin_url": origin,
         "amount_clp": PRICE_CLP_DISPLAY,
         "currency": "clp",
         "payment_status": "pending",
         "created_at": datetime.now(timezone.utc).isoformat(),
-    })
-    return {"url": session.url, "session_id": session.session_id}
+    }
+
+    if body.provider == "stripe":
+        stripe_checkout = _stripe(request)
+        try:
+            session = await stripe_checkout.create_checkout_session(
+                CheckoutSessionRequest(
+                    amount=PRICE_AMOUNT_FOR_STRIPE_LIB,
+                    currency="clp",
+                    success_url=f"{origin}/payment-success?tx={tx_id}",
+                    cancel_url=f"{origin}/",
+                    metadata={"device_id": body.device_id, "tx_id": tx_id},
+                )
+            )
+        except Exception as e:
+            logger.error(f"Stripe checkout error: {e}")
+            raise HTTPException(status_code=502, detail="No se pudo iniciar el pago con Stripe")
+        doc["session_id"] = session.session_id
+        url = session.url
+
+    elif body.provider == "mercadopago":
+        if not MP_ACCESS_TOKEN:
+            raise HTTPException(status_code=503, detail="Mercado Pago no está configurado aún")
+        payload = {
+            "external_reference": tx_id,
+            "items": [{
+                "title": "Guía Rutas Rapa Nui",
+                "description": "Acceso completo a rutas urbanas y rurales de Isla de Pascua",
+                "quantity": 1,
+                "unit_price": PRICE_CLP_DISPLAY,
+                "currency_id": "CLP",
+            }],
+            "back_urls": {
+                "success": f"{origin}/payment-success?tx={tx_id}",
+                "failure": f"{origin}/",
+                "pending": f"{origin}/payment-success?tx={tx_id}",
+            },
+            "auto_return": "approved",
+            "notification_url": f"{host_url}/api/webhook/mercadopago",
+            "metadata": {"device_id": body.device_id, "tx_id": tx_id},
+            "statement_descriptor": "RUTAS RAPA NUI",
+        }
+        headers = {"Authorization": f"Bearer {MP_ACCESS_TOKEN}", "Content-Type": "application/json"}
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                resp = await client.post(
+                    "https://api.mercadopago.com/checkout/preferences", json=payload, headers=headers
+                )
+            resp.raise_for_status()
+        except Exception as e:
+            logger.error(f"Mercado Pago error: {e}")
+            raise HTTPException(status_code=502, detail="No se pudo iniciar el pago con Mercado Pago")
+        pref = resp.json()
+        doc["session_id"] = pref.get("id")
+        url = pref.get("init_point")
+
+    elif body.provider == "flow":
+        if not (FLOW_API_KEY and FLOW_SECRET_KEY):
+            raise HTTPException(status_code=503, detail="Flow no está configurado aún")
+        if not body.email:
+            raise HTTPException(status_code=400, detail="Flow requiere un email para el comprobante")
+        params = {
+            "commerceOrder": tx_id,
+            "subject": "Guía Rutas Rapa Nui",
+            "currency": "CLP",
+            "amount": PRICE_CLP_DISPLAY,
+            "email": body.email,
+            "urlConfirmation": f"{host_url}/api/webhook/flow",
+            "urlReturn": f"{host_url}/api/payments/flow/return",
+            "optional": json.dumps({"device_id": body.device_id}),
+        }
+        try:
+            result = await _flow_call("payment/create", params)
+        except Exception as e:
+            logger.error(f"Flow error: {e}")
+            raise HTTPException(status_code=502, detail="No se pudo iniciar el pago con Flow")
+        flow_token = result.get("token")
+        doc["session_id"] = flow_token
+        url = f"{result.get('url')}?token={flow_token}"
+
+    else:
+        raise HTTPException(status_code=400, detail="Proveedor de pago inválido")
+
+    await db.payment_transactions.insert_one(doc)
+    return {"url": url, "tx_id": tx_id, "session_id": doc["session_id"]}
 
 
-@api_router.get("/payments/status/{session_id}")
-async def get_payment_status(session_id: str, request: Request):
-    stripe_checkout = _stripe(request)
+async def _mark_paid(query: dict):
+    await db.payment_transactions.update_one(
+        {**query, "payment_status": {"$ne": "paid"}},
+        {"$set": {"payment_status": "paid", "paid_at": datetime.now(timezone.utc).isoformat()}},
+    )
+
+
+async def _resolve_status(doc: dict, request: Request) -> dict:
+    provider = doc.get("provider", "stripe")
+    session_id = doc.get("session_id")
+
+    if provider == "stripe":
+        stripe_checkout = _stripe(request)
+        st = await stripe_checkout.get_checkout_status(session_id)
+        if st.payment_status == "paid":
+            await _mark_paid({"id": doc["id"]})
+        elif st.status == "expired" and doc.get("payment_status") == "pending":
+            await db.payment_transactions.update_one(
+                {"id": doc["id"]}, {"$set": {"payment_status": "expired"}}
+            )
+        return {"status": st.status, "payment_status": st.payment_status}
+
+    if provider == "mercadopago":
+        data = await _mp_get("/v1/payments/search", {"external_reference": doc["id"]})
+        results = data.get("results", [])
+        statuses = [r.get("status") for r in results]
+        if "approved" in statuses:
+            await _mark_paid({"id": doc["id"]})
+            return {"status": "complete", "payment_status": "paid"}
+        if statuses and all(s in ("rejected", "cancelled") for s in statuses):
+            return {"status": "open", "payment_status": "rejected"}
+        return {"status": "open", "payment_status": "unpaid"}
+
+    if provider == "flow":
+        st = await _flow_call("payment/getStatus", {"token": session_id}, method="get")
+        flow_status = st.get("status")  # 1=pendiente, 2=pagada, 3=rechazada, 4=anulada
+        if flow_status == 2:
+            await _mark_paid({"id": doc["id"]})
+            return {"status": "complete", "payment_status": "paid"}
+        if flow_status in (3, 4):
+            return {"status": "expired" if flow_status == 4 else "open", "payment_status": "rejected"}
+        return {"status": "open", "payment_status": "unpaid"}
+
+    raise HTTPException(status_code=400, detail="Proveedor desconocido")
+
+
+@api_router.get("/payments/status/{tx_id}")
+async def get_payment_status(tx_id: str, request: Request):
+    doc = await db.payment_transactions.find_one({"$or": [{"id": tx_id}, {"session_id": tx_id}]})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Transacción no encontrada")
+    if doc.get("payment_status") == "paid":
+        return {"status": "complete", "payment_status": "paid"}
     try:
-        status = await stripe_checkout.get_checkout_status(session_id)
+        return await _resolve_status(doc, request)
+    except HTTPException:
+        raise
     except Exception as e:
-        logging.getLogger(__name__).error(f"Stripe status error: {e}")
+        logger.error(f"Status error ({doc.get('provider')}): {e}")
         raise HTTPException(status_code=502, detail="No se pudo verificar el pago")
-
-    if status.payment_status == "paid":
-        await db.payment_transactions.update_one(
-            {"session_id": session_id, "payment_status": {"$ne": "paid"}},
-            {"$set": {"payment_status": "paid", "paid_at": datetime.now(timezone.utc).isoformat()}},
-        )
-    elif status.status == "expired":
-        await db.payment_transactions.update_one(
-            {"session_id": session_id, "payment_status": "pending"},
-            {"$set": {"payment_status": "expired"}},
-        )
-    return {"status": status.status, "payment_status": status.payment_status}
 
 
 @api_router.get("/payments/access/{device_id}")
@@ -136,6 +296,25 @@ async def check_access(device_id: str):
     return {"has_access": doc is not None}
 
 
+# --- Retorno de Flow (Flow redirige al pagador vía POST con el token) ---
+@api_router.api_route("/payments/flow/return", methods=["GET", "POST"])
+async def flow_return(request: Request):
+    token = request.query_params.get("token")
+    if not token and request.method == "POST":
+        try:
+            form = await request.form()
+            token = form.get("token")
+        except Exception:
+            token = None
+    doc = await db.payment_transactions.find_one({"session_id": token}) if token else None
+    if doc:
+        return RedirectResponse(
+            url=f"{doc['origin_url']}/payment-success?tx={doc['id']}", status_code=303
+        )
+    return RedirectResponse(url="/", status_code=303)
+
+
+# ---------------- Webhooks ----------------
 @api_router.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
     body = await request.body()
@@ -144,14 +323,44 @@ async def stripe_webhook(request: Request):
     try:
         webhook_response = await stripe_checkout.handle_webhook(body, signature)
         if webhook_response.payment_status == "paid":
-            await db.payment_transactions.update_one(
-                {"session_id": webhook_response.session_id, "payment_status": {"$ne": "paid"}},
-                {"$set": {"payment_status": "paid", "paid_at": datetime.now(timezone.utc).isoformat()}},
-            )
+            await _mark_paid({"session_id": webhook_response.session_id})
         return {"received": True}
     except Exception as e:
-        logging.getLogger(__name__).error(f"Webhook error: {e}")
+        logger.error(f"Webhook Stripe error: {e}")
         raise HTTPException(status_code=400, detail="Webhook inválido")
+
+
+@api_router.post("/webhook/mercadopago")
+async def mercadopago_webhook(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return {"received": True}
+    if body.get("type") == "payment" and body.get("data", {}).get("id"):
+        try:
+            payment = await _mp_get(f"/v1/payments/{body['data']['id']}")
+            if payment.get("status") == "approved" and payment.get("external_reference"):
+                await _mark_paid({"id": payment["external_reference"]})
+        except Exception as e:
+            logger.error(f"Webhook MP error: {e}")
+    return {"received": True}
+
+
+@api_router.post("/webhook/flow")
+async def flow_webhook(request: Request):
+    try:
+        form = await request.form()
+        token = form.get("token")
+    except Exception:
+        token = None
+    if token:
+        try:
+            st = await _flow_call("payment/getStatus", {"token": token}, method="get")
+            if st.get("status") == 2:
+                await _mark_paid({"session_id": token})
+        except Exception as e:
+            logger.error(f"Webhook Flow error: {e}")
+    return {"received": True}
 
 
 # Include the router in the main app
