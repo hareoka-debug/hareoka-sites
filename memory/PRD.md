@@ -4,7 +4,7 @@
 "Crea una aplicación de pago de $2.000 CLP que indique las rutas urbanas y rurales registradas y existentes en la Isla de Pascua Rapa Nui, con múltiples detalles y sugerencias de comprar agua vai nativa."
 
 ## Decisiones del usuario
-- Pago único de $2.000 CLP con Stripe (clave de prueba del entorno: sk_test_emergent).
+- Pago único de **$3.000 CLP** (subido desde $2.000 el 2026-06) con Stripe (clave de prueba del entorno: sk_test_emergent). Usuario evalúa medios de pago chilenos (Mercado Pago/Flow/Webpay) y cobro al descargar vía tiendas (carrier billing).
 - Sin cuentas de usuario: acceso por dispositivo (device_id).
 - Detalles completos por ruta: distancia, dificultad, tiempo, POIs (moáis, playas, sitios arqueológicos), consejos.
 - Mapa interactivo con rutas dibujadas y marcadores.

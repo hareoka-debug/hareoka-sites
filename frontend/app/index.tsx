@@ -173,7 +173,7 @@ export default function Paywall() {
           {paying ? (
             <ActivityIndicator color={colors.onBrand} />
           ) : (
-            <Text style={styles.ctaText}>Desbloquear Guía — $2.000 CLP</Text>
+            <Text style={styles.ctaText}>Desbloquear Guía — $3.000 CLP</Text>
           )}
         </Pressable>
         <Text style={styles.finePrint}>Pago único por dispositivo · Seguro con Stripe · Sin suscripciones</Text>

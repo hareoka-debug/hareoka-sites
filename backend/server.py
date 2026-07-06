@@ -58,10 +58,10 @@ async def get_water_points():
 
 
 # ---------------- Pagos (Stripe) ----------------
-# Precio fijo definido en el servidor: $2.000 CLP (CLP es moneda sin decimales;
-# la librería multiplica amount * 100, por lo que 20.0 -> unit_amount 2000 CLP).
-PRICE_CLP_DISPLAY = 2000
-PRICE_AMOUNT_FOR_LIB = 20.0
+# Precio fijo definido en el servidor: $3.000 CLP (CLP es moneda sin decimales;
+# la librería multiplica amount * 100, por lo que 30.0 -> unit_amount 3000 CLP).
+PRICE_CLP_DISPLAY = 3000
+PRICE_AMOUNT_FOR_LIB = 30.0
 
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
 
