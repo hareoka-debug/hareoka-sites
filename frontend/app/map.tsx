@@ -2,10 +2,14 @@ import BottomSheet, { BottomSheetFlatList } from "@gorhom/bottom-sheet";
 import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
+import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -14,6 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import IslandMap from "@/src/components/IslandMap";
+import { useUserLocation } from "@/src/hooks/use-user-location";
 import {
   RouteData,
   WaterPoint,
@@ -25,6 +30,9 @@ import {
   setLocalPaid,
 } from "@/src/lib/api";
 import { colors, difficultyColor, radius, serif, spacing } from "@/src/lib/theme";
+
+const ON_ISLAND = (lat: number, lng: number) =>
+  lat <= -27.02 && lat >= -27.22 && lng >= -109.49 && lng <= -109.2;
 
 type Filter = "todas" | "urbana" | "rural";
 
@@ -48,6 +56,8 @@ export default function MapScreen() {
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(
     params.selected || null,
   );
+  const { coords, tracking, acquiring, start, stop } = useUserLocation();
+  const [locNote, setLocNote] = useState<string | null>(null);
 
   const snapPoints = useMemo(() => ["16%", "45%", "85%"], []);
 
@@ -95,6 +105,67 @@ export default function MapScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelectedRouteId(id);
     sheetRef.current?.snapToIndex(0);
+  };
+
+  // Aviso si el usuario está fuera de la isla (el mapa web no puede mostrarlo)
+  useEffect(() => {
+    if (coords && !ON_ISLAND(coords.lat, coords.lng)) {
+      setLocNote(
+        Platform.OS === "web"
+          ? "Estás fuera de Rapa Nui: tu posición no aparece en el mapa de la isla."
+          : "Estás fuera de Rapa Nui.",
+      );
+    } else if (coords) {
+      setLocNote(null);
+    }
+  }, [coords]);
+
+  const beginTracking = useCallback(async () => {
+    const result = await start();
+    if (result === "ok") return;
+    if (result === "blocked") {
+      if (Platform.OS === "web") {
+        setLocNote("La ubicación está bloqueada en tu navegador. Actívala en la configuración del sitio.");
+      } else {
+        Alert.alert(
+          "Permiso de ubicación necesario",
+          "Para seguir las rutas en tiempo real, activa la ubicación de esta app en Ajustes.",
+          [
+            { text: "Cancelar", style: "cancel" },
+            { text: "Abrir Ajustes", onPress: () => Linking.openSettings() },
+          ],
+        );
+      }
+    } else if (result === "denied") {
+      setLocNote("Sin permiso de ubicación no podemos mostrar tu posición en el mapa.");
+    } else {
+      setLocNote("No se pudo obtener tu ubicación. Intenta de nuevo.");
+    }
+  }, [start]);
+
+  const handleLocate = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setLocNote(null);
+    if (tracking) {
+      stop();
+      return;
+    }
+    if (Platform.OS !== "web") {
+      const perm = await Location.getForegroundPermissionsAsync();
+      if (!perm.granted) {
+        // Explicación contextual antes del popup nativo de permisos
+        Alert.alert(
+          "Tu ubicación en el mapa",
+          "Mostraremos tu posición sobre las rutas para que puedas seguirlas en tiempo real mientras caminas.",
+          [
+            { text: "Ahora no", style: "cancel" },
+            { text: "Continuar", onPress: beginTracking },
+          ],
+        );
+        return;
+      }
+    }
+    beginTracking();
   };
 
   const renderCard = ({ item }: { item: RouteData }) => (
@@ -171,6 +242,7 @@ export default function MapScreen() {
         waterPoints={waterPoints}
         selectedRouteId={selectedRouteId}
         onSelectRoute={onSelectRoute}
+        userLocation={coords}
       />
 
       <View style={[styles.header, { top: insets.top + spacing.md }]}>
@@ -179,6 +251,33 @@ export default function MapScreen() {
           <Text style={styles.headerSub}>{routes.length} rutas · Isla de Pascua</Text>
         </View>
       </View>
+
+      <Pressable
+        style={[
+          styles.locateFab,
+          { top: insets.top + spacing.md },
+          tracking && styles.locateFabActive,
+        ]}
+        onPress={handleLocate}
+        disabled={acquiring}
+        testID="locate-button"
+      >
+        {acquiring ? (
+          <ActivityIndicator size="small" color={colors.brand} />
+        ) : (
+          <Feather name="navigation" size={20} color={tracking ? colors.onBrand : colors.brand} />
+        )}
+      </Pressable>
+
+      {locNote ? (
+        <Pressable
+          style={[styles.locNote, { top: insets.top + spacing.md + 56 }]}
+          onPress={() => setLocNote(null)}
+        >
+          <Feather name="info" size={14} color={colors.onSurfaceSecondary} />
+          <Text style={styles.locNoteText}>{locNote}</Text>
+        </Pressable>
+      ) : null}
 
       {selectedRoute ? (
         <Pressable
@@ -263,6 +362,34 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontFamily: serif, fontSize: 20, color: colors.onSurface },
   headerSub: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 2 },
+  locateFab: {
+    position: "absolute",
+    right: spacing.lg,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  locateFabActive: { backgroundColor: colors.brand, borderColor: colors.brand },
+  locNote: {
+    position: "absolute",
+    right: spacing.lg,
+    left: spacing.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  locNoteText: { flex: 1, fontSize: 12, color: colors.onSurfaceSecondary, lineHeight: 17 },
   selectedBanner: {
     position: "absolute",
     left: spacing.lg,

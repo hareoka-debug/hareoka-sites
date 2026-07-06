@@ -36,6 +36,8 @@
 - [x] Backend rutas + pagos implementado y verificado con curl (checkout crea sesión Stripe real de prueba)
 - [x] Frontend completo (paywall, mapa, detalle, éxito de pago)
 - [x] Testing e2e (iteración 1: 9/9 backend PASS, todos los flujos frontend PASS incl. pago real de prueba con tarjeta 4242 — Stripe mostró CLP 2.000 correcto)
+- [x] Revisión de despliegue PASS (se agregó --tunnel a supervisor + @expo/ngrok global; se eliminaron endpoints boilerplate /api/status)
+- [x] GPS en tiempo real: hook src/hooks/use-user-location.ts (expo-location watchPositionAsync), FAB "locate-button" en /map con flujo de permisos contextual (pre-explicación → request → denied/blocked → Abrir Ajustes), punto de usuario en ambos mapas (nativo anima cámara al primer fix; web dibuja punto si está dentro de la isla, aviso si está fuera). Permisos declarados en app.json (iOS infoPlist + Android).
 
 ## Notas
 - STRIPE_API_KEY agregada a /app/backend/.env ("sk_test_emergent").

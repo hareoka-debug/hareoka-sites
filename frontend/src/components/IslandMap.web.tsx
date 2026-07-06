@@ -12,6 +12,7 @@ interface Props {
   waterPoints: WaterPoint[];
   selectedRouteId: string | null;
   onSelectRoute: (id: string) => void;
+  userLocation?: { lat: number; lng: number } | null;
 }
 
 const W = 1000;
@@ -53,7 +54,10 @@ const ISLAND: [number, number][] = [
 
 const islandPoints = ISLAND.map(([lat, lng]) => `${px(lng)},${py(lat)}`).join(" ");
 
-export default function IslandMap({ routes, waterPoints, selectedRouteId, onSelectRoute }: Props) {
+const isOnIsland = (lat: number, lng: number) =>
+  lat <= LAT_TOP && lat >= LAT_BOTTOM && lng >= LON_MIN && lng <= LON_MAX;
+
+export default function IslandMap({ routes, waterPoints, selectedRouteId, onSelectRoute, userLocation }: Props) {
   const selected = routes.find((r) => r.id === selectedRouteId) || null;
 
   return (
@@ -119,6 +123,26 @@ export default function IslandMap({ routes, waterPoints, selectedRouteId, onSele
             </SvgText>
           </G>
         ))}
+
+        {userLocation && isOnIsland(userLocation.lat, userLocation.lng) ? (
+          <G>
+            <Circle
+              cx={px(userLocation.lng)}
+              cy={py(userLocation.lat)}
+              r={16}
+              fill={colors.info}
+              fillOpacity={0.25}
+            />
+            <Circle
+              cx={px(userLocation.lng)}
+              cy={py(userLocation.lat)}
+              r={7}
+              fill={colors.info}
+              stroke="#fff"
+              strokeWidth={2.5}
+            />
+          </G>
+        ) : null}
       </Svg>
     </View>
   );

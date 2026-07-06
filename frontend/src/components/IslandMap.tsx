@@ -1,5 +1,5 @@
-import React from "react";
-import { StyleSheet, View, Text } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { StyleSheet, View } from "react-native";
 import MapView, { Polyline, Marker } from "react-native-maps";
 import { Feather } from "@expo/vector-icons";
 
@@ -11,13 +11,33 @@ interface Props {
   waterPoints: WaterPoint[];
   selectedRouteId: string | null;
   onSelectRoute: (id: string) => void;
+  userLocation?: { lat: number; lng: number } | null;
 }
 
-export default function IslandMap({ routes, waterPoints, selectedRouteId, onSelectRoute }: Props) {
+export default function IslandMap({ routes, waterPoints, selectedRouteId, onSelectRoute, userLocation }: Props) {
   const selected = routes.find((r) => r.id === selectedRouteId) || null;
+  const mapRef = useRef<MapView>(null);
+  const centeredOnUser = useRef(false);
+
+  useEffect(() => {
+    if (userLocation && !centeredOnUser.current) {
+      centeredOnUser.current = true;
+      mapRef.current?.animateToRegion(
+        {
+          latitude: userLocation.lat,
+          longitude: userLocation.lng,
+          latitudeDelta: 0.03,
+          longitudeDelta: 0.03,
+        },
+        600,
+      );
+    }
+    if (!userLocation) centeredOnUser.current = false;
+  }, [userLocation]);
 
   return (
     <MapView
+      ref={mapRef}
       style={StyleSheet.absoluteFill}
       initialRegion={{
         latitude: -27.125,
@@ -63,6 +83,18 @@ export default function IslandMap({ routes, waterPoints, selectedRouteId, onSele
           </View>
         </Marker>
       ))}
+
+      {userLocation ? (
+        <Marker
+          coordinate={{ latitude: userLocation.lat, longitude: userLocation.lng }}
+          title="Tu ubicación"
+          anchor={{ x: 0.5, y: 0.5 }}
+        >
+          <View style={styles.userHalo}>
+            <View style={styles.userDot} />
+          </View>
+        </Marker>
+      ) : null}
     </MapView>
   );
 }
@@ -75,6 +107,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
+  userHalo: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(96,125,139,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  userDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: colors.info,
+    borderWidth: 2.5,
     borderColor: "#FFFFFF",
   },
 });
