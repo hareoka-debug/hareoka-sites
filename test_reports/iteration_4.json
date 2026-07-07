@@ -1,0 +1,32 @@
+{
+  "summary": "Iteration 4 smoke test post-deployment-fix (CORS from env + --tunnel restored) — PASS. Backend: 6/6 pytest cases green. GET /api/routes returns 11 routes with Access-Control-Allow-Origin='*' header on requests carrying Origin; OPTIONS preflight also returns CORS header. GET /api/payments/providers returns {stripe:true, mercadopago:true, flow:true, price_clp:3000}. GET /api/admin/sales enforces auth: 401 without header, 401 with wrong header, 200 with X-Admin-Key: RAPANUI-2026 (shape validated: total_clp:int, sales_count:int, pending_count:int, by_provider:dict, recent:list). Frontend smoke on mobile viewport 375x667: paywall '/' loads hero + 'Descubre Rapa Nui' headline + 3 payment method cards (method-mercadopago, method-flow, method-stripe) + unlock-button with exact text 'Desbloquear Guía — $3.000 CLP'; ZERO CORS errors and ZERO 'Failed to fetch' errors in console. With localStorage.setItem('rapa-nui-paid','true'), /map loads correctly: header 'Rutas Rapa Nui · 11 rutas · Isla de Pascua', bottom sheet lists 11 route cards including route-card-circuito-hanga-roa; tapping route-pin-circuito-hanga-roa shows selected-route-banner AND the VaiBanner 'AGUA VAI NATIVA · RAPA NUI · ¡Iorana! Recuerda beber agua vai nativa de Rapa Nui'. No regressions detected. Non-blocking console noise: Expo web renderer warnings (React 19 element.ref deprecation, onResponderGrant etc.) — pre-existing framework noise, not caused by this iteration.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_smoke_iter4.py",
+    "/app/test_reports/pytest/pytest_iter4_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:426 CORS origin parsing via os.environ.get('CORS_ORIGINS', '*').split(',') is correct; with CORS_ORIGINS='*' it results in allow_origins=['*']. Combined with allow_credentials=True this is technically non-standard (Starlette will emit a warning and browsers ignore credentials when '*') but does not affect this app because no cookies are used. Non-blocking.",
+    "server.py:378-385 ADMIN_KEY guard treats empty env as universal 401 (correct defensive behavior).",
+    "frontend/.env exposes EXPO_PUBLIC_BACKEND_URL correctly; consumed via process.env in api.ts (validated indirectly — no API errors seen in console during smoke)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_smoke_iter4.py (new, 6 dedicated smoke tests for post-deploy fix)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (all smoke checks passed)"},
+  "seed_data_creation": "None. Used existing DB state (2 stripe paid transactions carried from previous iterations).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 4 was a smoke test post-fix of CORS env-driven config and supervisor --tunnel restore. All flows verified end-to-end via public preview URL https://rapa-nui-routes.preview.emergentagent.com. Backend regression file: /app/backend/tests/test_smoke_iter4.py. Prior iterations 1-3 already covered full Stripe e2e flow and multi-provider metadata — do NOT rerun full checkout flow with real MP/Flow prod credentials. For future iterations, /app/backend/tests/backend_test.py (from iteration 2) still has stale assertions expecting flow:false; use /app/backend/tests/test_smoke_iter4.py or /app/backend/tests/test_admin_sales.py as source of truth. VaiBanner rotates messages every 6s — smoke captured the 'AGUA VAI NATIVA' variant on first render.",
+  "rca_of_issue": "N/A — no defects surfaced. The two fixes (CORS from env, tunnel restored) are working correctly: CORS header present on GET/OPTIONS with Origin; frontend served through tunnel loads paywall and /map with backend integration intact."
+}
