@@ -22,6 +22,7 @@ import {
 } from "@/src/lib/api";
 import VaiBanner from "@/src/components/VaiBanner";
 import { colors, difficultyColor, poiColor, poiIcon, radius, serif, spacing } from "@/src/lib/theme";
+import { distanceKm } from "@/src/lib/geo";
 
 export default function RouteDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -65,7 +66,11 @@ export default function RouteDetail() {
     );
   }
 
-  const buyPoints = waterPoints.filter((w) => route.vai.buy_point_ids.includes(w.id));
+  const buyPoints = waterPoints.filter(
+    (w) =>
+      route.vai.buy_point_ids.includes(w.id) ||
+      (w.custom && route.path.some(([la, ln]) => distanceKm(w.lat, w.lng, la, ln) <= 5)),
+  );
   const hours = Math.floor(route.duration_min / 60);
   const mins = route.duration_min % 60;
   const duration = hours > 0 ? `${hours} h${mins ? ` ${mins} min` : ""}` : `${mins} min`;
@@ -159,7 +164,7 @@ export default function RouteDetail() {
               <Text style={styles.litersValue}>{route.vai.recommended_liters}</Text>
             </View>
 
-            <Text style={styles.vaiSectionLabel}>Dónde comprar agua vai nativa</Text>
+            <Text style={styles.vaiSectionLabel}>Dónde comprar agua VAINATIVA</Text>
             {buyPoints.map((w) => (
               <View key={w.id} style={styles.buyRow}>
                 <Feather name="shopping-bag" size={14} color={colors.onBrandTertiary} />

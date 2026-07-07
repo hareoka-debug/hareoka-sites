@@ -58,7 +58,7 @@ async def get_route(route_id: str):
 
 @api_router.get("/water-points")
 async def get_water_points():
-    return WATER_POINTS
+    return await db.water_points.find({}, {"_id": 0}).to_list(200)
 
 
 # ---------------- Pagos (Stripe + Mercado Pago + Flow) ----------------
@@ -378,11 +378,15 @@ async def flow_webhook(request: Request):
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
 
 
-@api_router.get("/admin/sales")
-async def admin_sales(request: Request):
+def _check_admin(request: Request):
     key = request.headers.get("X-Admin-Key") or request.query_params.get("key")
     if not ADMIN_KEY or key != ADMIN_KEY:
         raise HTTPException(status_code=401, detail="Clave de administrador incorrecta")
+
+
+@api_router.get("/admin/sales")
+async def admin_sales(request: Request):
+    _check_admin(request)
 
     paid = await db.payment_transactions.find(
         {"payment_status": "paid"},
@@ -417,6 +421,41 @@ async def admin_sales(request: Request):
     }
 
 
+# --- Editor de Puntos Vai (dónde comprar agua VAINATIVA) ---
+class WaterPointIn(BaseModel):
+    name: str
+    description: str = ""
+    lat: float
+    lng: float
+    type: str = "tienda"
+
+
+@api_router.post("/admin/water-points")
+async def create_water_point(body: WaterPointIn, request: Request):
+    _check_admin(request)
+    doc = {"id": str(uuid.uuid4()), "custom": True, **body.dict()}
+    await db.water_points.insert_one({**doc})
+    return doc
+
+
+@api_router.put("/admin/water-points/{point_id}")
+async def update_water_point(point_id: str, body: WaterPointIn, request: Request):
+    _check_admin(request)
+    result = await db.water_points.update_one({"id": point_id}, {"$set": body.dict()})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Punto no encontrado")
+    return await db.water_points.find_one({"id": point_id}, {"_id": 0})
+
+
+@api_router.delete("/admin/water-points/{point_id}")
+async def delete_water_point(point_id: str, request: Request):
+    _check_admin(request)
+    result = await db.water_points.delete_one({"id": point_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Punto no encontrado")
+    return {"deleted": True}
+
+
 # Include the router in the main app
 app.include_router(api_router)
 
@@ -434,6 +473,12 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+@app.on_event("startup")
+async def seed_water_points():
+    if await db.water_points.count_documents({}) == 0:
+        await db.water_points.insert_many([{**w} for w in WATER_POINTS])
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

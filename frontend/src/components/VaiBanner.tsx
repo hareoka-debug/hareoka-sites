@@ -5,11 +5,11 @@ import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, radius, spacing } from "@/src/lib/theme";
 
 const MESSAGES = [
-  "¡Iorana! Recuerda beber agua vai nativa de Rapa Nui 💧",
-  "El sol de la isla no perdona: hidrátate con agua vai nativa",
-  "Vai significa agua en rapanui. ¡Toma la tuya antes de partir!",
-  "Compra tu agua vai nativa en Hanga Roa antes de salir a la ruta",
-  "Un sorbo de agua vai cada 30 minutos mantiene tu caminata segura",
+  "¡Iorana! Recuerda beber agua VAINATIVA de Rapa Nui 💧",
+  "El sol de la isla no perdona: hidrátate con agua VAINATIVA",
+  "VAINATIVA, el agua de Rapa Nui. ¡Toma la tuya antes de partir!",
+  "Compra tu agua VAINATIVA en Hanga Roa antes de salir a la ruta",
+  "Un sorbo de agua VAINATIVA cada 30 minutos mantiene tu caminata segura",
 ];
 
 interface Props {
@@ -36,7 +36,7 @@ export default function VaiBanner({ onPress }: Props) {
         <Feather name="droplet" size={16} color={colors.onBrand} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.brand}>AGUA VAI NATIVA · RAPA NUI</Text>
+        <Text style={styles.brand}>AGUA VAINATIVA · EL AGUA DE RAPA NUI</Text>
         <Animated.Text style={[styles.message, { opacity }]} numberOfLines={2}>
           {MESSAGES[index]}
         </Animated.Text>

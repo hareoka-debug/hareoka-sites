@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { storage } from "@/src/utils/storage";
+import WaterPointsEditor from "@/src/components/WaterPointsEditor";
 import { colors, radius, serif, spacing } from "@/src/lib/theme";
 
 const BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
@@ -52,6 +53,7 @@ export default function AdminPanel() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sales, setSales] = useState<Sales | null>(null);
+  const [tab, setTab] = useState<"ventas" | "vai">("ventas");
 
   const fetchSales = useCallback(async (adminKey: string): Promise<boolean> => {
     const res = await fetch(`${BASE}/api/admin/sales`, {
@@ -164,12 +166,34 @@ export default function AdminPanel() {
         <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerBtn} testID="admin-back">
           <Feather name="arrow-left" size={20} color={colors.onSurface} />
         </Pressable>
-        <Text style={styles.headerTitle}>Panel de Ventas</Text>
+        <Text style={styles.headerTitle}>Panel del Dueño</Text>
         <Pressable onPress={handleLogout} hitSlop={12} style={styles.headerBtn} testID="admin-logout">
           <Feather name="log-out" size={18} color={colors.onSurfaceTertiary} />
         </Pressable>
       </View>
 
+      <View style={styles.tabs}>
+        <Pressable
+          style={[styles.tab, tab === "ventas" && styles.tabActive]}
+          onPress={() => setTab("ventas")}
+          testID="tab-ventas"
+        >
+          <Feather name="bar-chart-2" size={14} color={tab === "ventas" ? colors.onBrand : colors.onSurfaceSecondary} />
+          <Text style={[styles.tabText, tab === "ventas" && styles.tabTextActive]}>Ventas</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.tab, tab === "vai" && styles.tabActive]}
+          onPress={() => setTab("vai")}
+          testID="tab-vai"
+        >
+          <Feather name="droplet" size={14} color={tab === "vai" ? colors.onBrand : colors.onSurfaceSecondary} />
+          <Text style={[styles.tabText, tab === "vai" && styles.tabTextActive]}>Puntos Vai</Text>
+        </Pressable>
+      </View>
+
+      {tab === "vai" ? (
+        <WaterPointsEditor adminKey={key} bottomInset={insets.bottom} />
+      ) : (
       <ScrollView
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
@@ -228,6 +252,7 @@ export default function AdminPanel() {
           ))
         )}
       </ScrollView>
+      )}
     </View>
   );
 }
@@ -286,6 +311,27 @@ const styles = StyleSheet.create({
   },
   headerBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   headerTitle: { fontFamily: serif, fontSize: 20, color: colors.onSurface },
+  tabs: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: "row",
+    gap: spacing.xs,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 40,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSecondary,
+  },
+  tabActive: { backgroundColor: colors.brand, borderColor: colors.brand },
+  tabText: { fontSize: 13, fontWeight: "600", color: colors.onSurfaceSecondary },
+  tabTextActive: { color: colors.onBrand },
   totalCard: {
     backgroundColor: colors.surfaceInverse,
     borderRadius: radius.lg,

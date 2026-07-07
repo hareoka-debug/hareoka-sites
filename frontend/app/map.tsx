@@ -31,23 +31,10 @@ import {
   setLocalPaid,
 } from "@/src/lib/api";
 import { colors, difficultyColor, radius, serif, spacing } from "@/src/lib/theme";
+import { distanceKm, formatDistance } from "@/src/lib/geo";
 
 const ON_ISLAND = (lat: number, lng: number) =>
   lat <= -27.02 && lat >= -27.22 && lng >= -109.49 && lng <= -109.2;
-
-// Distancia haversine en km
-const distanceKm = (lat1: number, lng1: number, lat2: number, lng2: number) => {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
-
-const formatDistance = (km: number) =>
-  km < 1 ? `a ${Math.round(km * 1000)} m de ti` : `a ${km.toFixed(1).replace(".", ",")} km de ti`;
 
 type Filter = "todas" | "urbana" | "rural";
 

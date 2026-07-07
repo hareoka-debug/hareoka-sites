@@ -39,6 +39,7 @@ export interface WaterPoint {
   lng: number;
   type: string;
   description: string;
+  custom?: boolean;
 }
 
 const DEVICE_ID_KEY = "rapa-nui-device-id";
@@ -104,3 +105,34 @@ export async function createCheckout(
 export async function checkPaymentStatus(txId: string) {
   return get<{ status: string; payment_status: string }>(`/payments/status/${txId}`);
 }
+
+// --- Admin: Puntos Vai ---
+export interface WaterPointInput {
+  name: string;
+  description: string;
+  lat: number;
+  lng: number;
+  type?: string;
+}
+
+async function adminRequest(path: string, adminKey: string, method: string, body?: object) {
+  const res = await fetch(`${BASE}/api${path}`, {
+    method,
+    headers: { "Content-Type": "application/json", "X-Admin-Key": adminKey },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export const addWaterPoint = (adminKey: string, data: WaterPointInput) =>
+  adminRequest("/admin/water-points", adminKey, "POST", data) as Promise<WaterPoint>;
+
+export const updateWaterPoint = (adminKey: string, id: string, data: WaterPointInput) =>
+  adminRequest(`/admin/water-points/${id}`, adminKey, "PUT", data) as Promise<WaterPoint>;
+
+export const deleteWaterPoint = (adminKey: string, id: string) =>
+  adminRequest(`/admin/water-points/${id}`, adminKey, "DELETE");

@@ -38,7 +38,7 @@ const HERO =
 
 const BULLETS: { icon: any; text: string }[] = [
   { icon: "map", text: "11 rutas urbanas y rurales con mapa interactivo" },
-  { icon: "droplet", text: "Puntos Vai: dónde comprar agua nativa en cada ruta" },
+  { icon: "droplet", text: "Puntos Vai: dónde comprar agua VAINATIVA en cada ruta" },
   { icon: "compass", text: "Moáis, playas y sitios arqueológicos con todo detalle" },
 ];
 

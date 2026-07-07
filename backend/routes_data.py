@@ -8,11 +8,11 @@ IMG_WATER = "https://images.unsplash.com/photo-1763490538690-5089ad94fc6b?crop=e
 WATER_POINTS = [
     {
         "id": "vai-1",
-        "name": "Supermercado Kai Nene",
+        "name": "Supermercado HE IVI",
         "lat": -27.1490,
         "lng": -109.4315,
         "type": "tienda",
-        "description": "El supermercado más grande de Hanga Roa. Agua vai nativa embotellada, bloqueador e insumos para el trekking.",
+        "description": "El supermercado más grande de Hanga Roa. Agua VAINATIVA embotellada, bloqueador e insumos para el trekking.",
     },
     {
         "id": "vai-2",
@@ -46,6 +46,22 @@ WATER_POINTS = [
         "type": "tienda",
         "description": "Práctico para abastecerse antes de subir al Rano Kau u Orongo.",
     },
+    {
+        "id": "vai-6",
+        "name": "Panadería HARAO TIRE",
+        "lat": -27.1470,
+        "lng": -109.4285,
+        "type": "tienda",
+        "description": "Pan fresco y agua VAINATIVA fría, ideal para armar tu colación antes de salir a la ruta.",
+    },
+    {
+        "id": "vai-7",
+        "name": "Locales de Rano Raraku",
+        "lat": -27.1225,
+        "lng": -109.2930,
+        "type": "tienda",
+        "description": "Locales de venta en el sector de la cantera Rano Raraku: agua VAINATIVA, jugos y snacks para el recorrido.",
+    },
 ]
 
 ROUTES = [
@@ -77,7 +93,7 @@ ROUTES = [
             "recommended_liters": "1 litro por persona",
             "buy_point_ids": ["vai-1", "vai-2", "vai-3"],
             "tips": [
-                "Compra agua vai nativa embotellada en el Supermercado Kai Nene o en la Feria Municipal al inicio del circuito.",
+                "Compra agua VAINATIVA embotellada en el Supermercado HE IVI o en la Feria Municipal al inicio del circuito.",
                 "El sol en la isla es intenso incluso con nubes: hidrátate cada 30 minutos.",
                 "Prefiere botellas reutilizables; la isla tiene un delicado sistema de manejo de residuos.",
             ],
@@ -109,7 +125,7 @@ ROUTES = [
             "recommended_liters": "1 litro por persona",
             "buy_point_ids": ["vai-1", "vai-2"],
             "tips": [
-                "Hay almacenes a pocos metros de la costanera: aprovecha de comprar agua vai nativa fría.",
+                "Hay almacenes a pocos metros de la costanera: aprovecha de comprar agua VAINATIVA fría.",
                 "Si vas al atardecer, lleva agua igualmente: la brisa marina deshidrata sin que lo notes.",
             ],
         },
@@ -137,7 +153,7 @@ ROUTES = [
             "recommended_liters": "1,5 litros por persona",
             "buy_point_ids": ["vai-1", "vai-5"],
             "tips": [
-                "El Minimarket del sector Mataveri es el último punto para comprar agua vai nativa antes de la cueva.",
+                "El Minimarket del sector Mataveri es el último punto para comprar agua VAINATIVA antes de la cueva.",
                 "No hay sombra en el tramo final: lleva sombrero y protector solar.",
             ],
         },
@@ -169,7 +185,7 @@ ROUTES = [
             "recommended_liters": "2,5 litros por persona",
             "buy_point_ids": ["vai-1", "vai-5"],
             "tips": [
-                "NO hay venta de agua en Orongo ni en el cráter: compra toda tu agua vai nativa en Hanga Roa o Mataveri.",
+                "NO hay venta de agua en Orongo ni en el cráter: compra toda tu agua VAINATIVA en Hanga Roa o Mataveri.",
                 "El ascenso es exigente con calor: sal antes de las 9:00 y bebe 250 ml cada 20 minutos.",
                 "La laguna del cráter NO es apta para beber ni para acercarse: es zona protegida.",
             ],
@@ -201,7 +217,7 @@ ROUTES = [
             "buy_point_ids": ["vai-4", "vai-1"],
             "tips": [
                 "El Kiosco de Anakena es el ÚNICO punto de venta de agua fuera de Hanga Roa: no siempre abre en temporada baja.",
-                "Lleva agua vai nativa de respaldo desde Hanga Roa: son 18 km sin ningún otro abastecimiento.",
+                "Lleva agua VAINATIVA de respaldo desde Hanga Roa: son 18 km sin ningún otro abastecimiento.",
                 "Después de nadar en agua salada la deshidratación aumenta: bebe apenas salgas del mar.",
             ],
         },
@@ -229,9 +245,9 @@ ROUTES = [
         ],
         "vai": {
             "recommended_liters": "2 litros por persona",
-            "buy_point_ids": ["vai-1", "vai-3"],
+            "buy_point_ids": ["vai-7", "vai-1", "vai-3"],
             "tips": [
-                "Estás a 20 km de Hanga Roa: compra toda el agua vai nativa antes de salir del pueblo.",
+                "Estás a 20 km de Hanga Roa: compra agua VAINATIVA antes de salir del pueblo o en los locales del sector Rano Raraku.",
                 "Para ver el amanecer en Tongariki llega 6:30; lleva agua y abrigo, el viento es fuerte.",
                 "En la cantera no hay sombra: hidrátate antes de sentir sed.",
             ],
@@ -262,7 +278,7 @@ ROUTES = [
             "recommended_liters": "3 litros por persona",
             "buy_point_ids": ["vai-1", "vai-3"],
             "tips": [
-                "Ruta SIN ningún punto de agua: carga 3 litros de agua vai nativa por persona desde Hanga Roa.",
+                "Ruta SIN ningún punto de agua: carga 3 litros de agua VAINATIVA por persona desde Hanga Roa.",
                 "Cero sombra en 10 km: sal antes de las 8:00, usa sombrero, mangas largas y factor 50+.",
                 "El humedal Rano Aroi NO es apto para beber: es reserva protegida de agua de la isla.",
                 "Si sientes dolor de cabeza o mareo, es deshidratación: bebe, descansa y desciende.",
@@ -293,7 +309,7 @@ ROUTES = [
             "recommended_liters": "2 litros por persona",
             "buy_point_ids": ["vai-1", "vai-3"],
             "tips": [
-                "Sin puntos de venta en la ruta: abastécete de agua vai nativa en los almacenes de Av. Atamu Tekena.",
+                "Sin puntos de venta en la ruta: abastécete de agua VAINATIVA en los almacenes de Av. Atamu Tekena.",
                 "Dentro de las cuevas la temperatura baja, pero el trayecto entre sitios es a pleno sol.",
                 "No toques los plátanos de los manavai: son sitios arqueológicos vivos.",
             ],
@@ -325,7 +341,7 @@ ROUTES = [
             "recommended_liters": "3,5 litros por persona",
             "buy_point_ids": ["vai-1"],
             "tips": [
-                "La ruta más remota de la guía: carga 3,5 litros de agua vai nativa por persona, sin excepción.",
+                "La ruta más remota de la guía: carga 3,5 litros de agua VAINATIVA por persona, sin excepción.",
                 "Contrata guía local: incluye normalmente transporte y agua adicional, confírmalo antes.",
                 "No hay señal de celular en gran parte del Poike: avisa tu ruta antes de salir.",
                 "Guarda 1 litro de reserva para el regreso: el viento del este deshidrata rápidamente.",
@@ -360,7 +376,7 @@ ROUTES = [
             "recommended_liters": "4 litros por persona",
             "buy_point_ids": ["vai-1", "vai-3", "vai-4"],
             "tips": [
-                "La ruta más larga de la guía: 4 litros de agua vai nativa por persona es el mínimo seguro.",
+                "La ruta más larga de la guía: 4 litros de agua VAINATIVA por persona es el mínimo seguro.",
                 "El Kiosco de Anakena al final del recorrido vende agua fría, pero NO dependas de él: confirma horario.",
                 "Congela 2 botellas la noche anterior: se descongelan en ruta y mantienen el agua fresca.",
                 "Coordina transporte de regreso desde Anakena: no querrás caminar de vuelta.",
@@ -391,7 +407,7 @@ ROUTES = [
             "recommended_liters": "1,5 litros por persona",
             "buy_point_ids": ["vai-5", "vai-1"],
             "tips": [
-                "Compra agua vai nativa en el minimarket de Mataveri al inicio de la ruta.",
+                "Compra agua VAINATIVA en el minimarket de Mataveri al inicio de la ruta.",
                 "Ruta expuesta al viento sur: aunque se sienta fresco, bebe cada 30 minutos.",
             ],
         },

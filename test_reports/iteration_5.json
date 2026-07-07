@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration 5 — CRUD Puntos Vai + rebrand VAINATIVA — ALL PASS. Backend (6/6 pytest green in /app/backend/tests/test_water_points_iter5.py): GET /api/water-points returns the 7 seeded MongoDB points (vai-1..vai-7) with no _id leaked and includes renamed 'Supermercado HE IVI' (vai-1), new 'Panadería HARAO TIRE' (vai-6) and 'Locales de Rano Raraku' (vai-7); GET /api/routes/rano-raraku-tongariki includes 'vai-7' in vai.buy_point_ids; POST/PUT/DELETE /api/admin/water-points all return 401 without X-Admin-Key; full happy path CRUD works — POST creates with custom:true (id assigned, no _id), GET confirms persistence, PUT updates name (and returns clean doc), PUT/DELETE on non-existent id return 404, DELETE returns {deleted:true}; final GET confirms the 7 seeded points remain (test-created point purged). Frontend on mobile viewport 375x667 (public preview URL): /admin with key RAPANUI-2026 shows tabs 'Ventas' and 'Puntos Vai' (testID tab-ventas, tab-vai). In 'Puntos Vai' the 7 seeded rows (wp-row-vai-1..vai-7) are rendered; add-water-point opens the form (wp-name, wp-description, sector chips, wp-save) — created a TEST_ point in sector 'Rano Raraku', it appeared in the list, edited via wp-edit-{id} + wp-save (name changed to 'TEST_UI Editado'), then deleted via wp-delete-{id} → wp-confirm-delete-{id} and the row disappeared. Route detail /route/rano-raraku-tongariki (with localStorage rapa-nui-paid=true, reached from /map via route-card-rano-raraku-tongariki): VaiBanner shows 'AGUA VAINATIVA · EL AGUA DE RAPA NUI' (one word 'VAINATIVA', no space), the section 'DÓNDE COMPRAR AGUA VAINATIVA' is present and lists 'Locales de Rano Raraku' plus 'Supermercado HE IVI' and 'Almacenes Av. Atamu Tekena'. Map (/map) renders 7 V-labeled water drop markers in SVG including one in the east of the island (Rano Raraku sector at ~-27.12, -109.29). No regressions detected in payments UI, admin sales tab or map integration.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_water_points_iter5.py",
+    "/app/test_reports/pytest/pytest_iter5_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:441-447 update_water_point returns find_one({...}, {'_id':0}) — correct, no ObjectId leak.",
+    "server.py:433-438 create_water_point returns 'doc' which is built before insert_one (spread copy avoids mongo inserting _id back into the returned dict). Good pattern.",
+    "server.py:477-480 seed_water_points is idempotent (only seeds when collection empty). Safe against restart.",
+    "WaterPointsEditor.tsx:82-87 nearest-sector reducer works but overrides label/lat/lng from the point's own coords; UX is fine because the closest chip visually matches. Non-blocking.",
+    "route/[id].tsx:69-73 buyPoints filter merges buy_point_ids with custom points within 5 km of any path node using distanceKm — correct behavior; verified visually with 'Locales de Rano Raraku' appearing on rano-raraku-tongariki."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_water_points_iter5.py (new, 6 pytest cases: seed shape, route link, 3× 401 guards, full CRUD roundtrip with cleanup + teardown_module safety net)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (admin CRUD + rebrand + map markers all verified)"},
+  "seed_data_creation": "None persisted. The test CRUD created 1 water point (TEST_Kiosco Prueba / TEST_UI Rano Punto) during pytest and playwright respectively — both were deleted before test completion; teardown_module also purges any leftover TEST_ or custom points. Final /api/water-points state = the 7 original seeded points.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 5 delivered a MongoDB-backed water_points collection (seeded from routes_data.WATER_POINTS at startup only if empty), an admin CRUD (X-Admin-Key: RAPANUI-2026), a WaterPointsEditor React Native screen behind a new 'Puntos Vai' tab in /admin, and the VaiBanner rebrand to 'AGUA VAINATIVA · EL AGUA DE RAPA NUI' (single word 'VAINATIVA', no space). Regression suite of record: /app/backend/tests/test_water_points_iter5.py (6 tests) + /app/backend/tests/test_smoke_iter4.py (6 tests) + /app/backend/tests/test_admin_sales.py. Do NOT re-run /app/backend/tests/backend_test.py — it has stale assertions from iter 1-2. The custom-point proximity rule is 5 km against any path node in the target route (route/[id].tsx L69-73); to sanity-test in the future, create a custom point near a route's path and confirm it appears in the 'DÓNDE COMPRAR AGUA VAINATIVA' section of that route's detail. No production Mercado Pago / Flow checkouts were completed.",
+  "rca_of_issue": "N/A — no defects found this iteration."
+}
