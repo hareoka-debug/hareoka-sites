@@ -49,6 +49,13 @@
 - Acceso: URL /admin (web) o long-press (800ms) en el chip "Rutas Rapa Nui" del mapa
 - Verificado: 401 con clave mala, dashboard muestra $5.000 (2 ventas de prueba Stripe)
 
+## Puntos Vai editables + rebrand VAINATIVA (iteración 5 — ALL PASS)
+- Marca: "AGUA VAINATIVA · EL AGUA DE RAPA NUI" (una palabra) en banner, paywall y detalles.
+- water_points ahora en MongoDB (seed 7 puntos si colección vacía, desde routes_data.WATER_POINTS): vai-1 Supermercado HE IVI (renombrado), vai-6 Panadería HARAO TIRE, vai-7 Locales de Rano Raraku (nuevos).
+- CRUD admin: POST/PUT/DELETE /api/admin/water-points[/{id}] con X-Admin-Key. Puntos creados llevan custom:true.
+- Editor UI: pestaña "Puntos Vai" en /admin (src/components/WaterPointsEditor.tsx) con chips de sector predefinidos (7 sectores de la isla) en vez de lat/lng manual.
+- Detalle de ruta: muestra buy_point_ids + puntos custom a ≤5 km del path (src/lib/geo.ts compartido).
+
 ## Estado
 - [x] Backend rutas + pagos implementado y verificado con curl (checkout crea sesión Stripe real de prueba)
 - [x] Frontend completo (paywall, mapa, detalle, éxito de pago)
