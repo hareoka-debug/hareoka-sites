@@ -42,6 +42,13 @@
 - Paywall: selector de método (testID method-*), input email para Flow, precio $3.000 CLP.
 - NOTA entorno: expo --tunnel requiere @expo/ngrok instalado globalmente (sudo npm i -g @expo/ngrok); se reinstaló tras reinicio del pod.
 
+## Panel de ventas (admin)
+- GET /api/admin/sales (header X-Admin-Key) → total_clp, sales_count, pending_count, by_provider, recent(30)
+- ADMIN_KEY="RAPANUI-2026" en backend/.env (también en /app/memory/test_credentials.md)
+- Frontend: /app/frontend/app/admin.tsx (login con clave guardada en storage, dashboard con pull-to-refresh, logout)
+- Acceso: URL /admin (web) o long-press (800ms) en el chip "Rutas Rapa Nui" del mapa
+- Verificado: 401 con clave mala, dashboard muestra $5.000 (2 ventas de prueba Stripe)
+
 ## Estado
 - [x] Backend rutas + pagos implementado y verificado con curl (checkout crea sesión Stripe real de prueba)
 - [x] Frontend completo (paywall, mapa, detalle, éxito de pago)

@@ -374,6 +374,48 @@ async def flow_webhook(request: Request):
     return {"received": True}
 
 
+# ---------------- Panel de ventas (solo dueño) ----------------
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
+
+
+@api_router.get("/admin/sales")
+async def admin_sales(request: Request):
+    key = request.headers.get("X-Admin-Key") or request.query_params.get("key")
+    if not ADMIN_KEY or key != ADMIN_KEY:
+        raise HTTPException(status_code=401, detail="Clave de administrador incorrecta")
+
+    paid = await db.payment_transactions.find(
+        {"payment_status": "paid"}
+    ).sort("paid_at", -1).to_list(500)
+
+    by_provider: dict = {}
+    total = 0
+    for p in paid:
+        total += p.get("amount_clp", 0)
+        prov = p.get("provider", "stripe")
+        by_provider.setdefault(prov, {"count": 0, "total_clp": 0})
+        by_provider[prov]["count"] += 1
+        by_provider[prov]["total_clp"] += p.get("amount_clp", 0)
+
+    pending_count = await db.payment_transactions.count_documents({"payment_status": "pending"})
+
+    return {
+        "total_clp": total,
+        "sales_count": len(paid),
+        "pending_count": pending_count,
+        "by_provider": by_provider,
+        "recent": [
+            {
+                "provider": p.get("provider", "stripe"),
+                "amount_clp": p.get("amount_clp", 0),
+                "paid_at": p.get("paid_at"),
+                "device_id": (p.get("device_id") or "")[:14],
+            }
+            for p in paid[:30]
+        ],
+    }
+
+
 # Include the router in the main app
 app.include_router(api_router)
 

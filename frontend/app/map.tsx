@@ -271,10 +271,18 @@ export default function MapScreen() {
       />
 
       <View style={[styles.header, { top: insets.top + spacing.md }]}>
-        <View style={styles.headerChip}>
+        <Pressable
+          style={styles.headerChip}
+          onLongPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            router.push("/admin");
+          }}
+          delayLongPress={800}
+          testID="header-chip"
+        >
           <Text style={styles.headerTitle}>Rutas Rapa Nui</Text>
           <Text style={styles.headerSub}>{routes.length} rutas · Isla de Pascua</Text>
-        </View>
+        </Pressable>
       </View>
 
       <Pressable
