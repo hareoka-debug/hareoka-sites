@@ -1,0 +1,32 @@
+{
+  "summary": "Iteration 3 BACKEND-ONLY verification after MongoDB projection optimization on /api/admin/sales. All 8 pytest cases PASS (8/8, 100%). No regression: GET /api/routes returns 11 routes; GET /api/payments/providers returns {stripe:true, mercadopago:true, flow:true, price_clp:3000}. Admin sales endpoint works correctly: (1) 401 with missing header, wrong key, or empty key; (2) 200 with header X-Admin-Key: RAPANUI-2026; (3) also accepts ?key= query param (200); (4) response shape validated: total_clp is int (>=0), sales_count is int, pending_count is int, by_provider is dict of provider -> {count:int, total_clp:int}, recent is list <=30 items each with provider(str), amount_clp(int), paid_at, device_id(str, truncated <=14 chars). Consistency invariants hold: sum(by_provider.count) == sales_count and sum(by_provider.total_clp) == total_clp. Sample response from public URL: {\"total_clp\":5000,\"sales_count\":2,\"pending_count\":13,\"by_provider\":{\"stripe\":{\"count\":2,\"total_clp\":5000}},\"recent\":[...]} — projection is working (only provider, amount_clp, paid_at, device_id are returned per doc, no _id leaked).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_sales.py",
+    "/app/test_reports/pytest/pytest_iter3_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:387-390 uses correct MongoDB projection {provider:1, amount_clp:1, paid_at:1, device_id:1} which excludes _id from the fetched documents implicitly at Python level (never returned in response). Optimization looks safe.",
+    "Sort key .sort('paid_at', -1) — items with paid_at=None could reorder unpredictably but does not affect current tests. Non-blocking.",
+    "Endpoint accepts key via header OR query param; both paths return 401 when ADMIN_KEY env is empty (defensive). Behavior verified."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_admin_sales.py (new file, 8 tests dedicated to admin sales projection optimization + minimal regression on /routes and /payments/providers)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "skipped per request"},
+  "seed_data_creation": "No new seed data created in this iteration. Used existing paid transactions (2 stripe, total 5000 CLP) and pending (13) already present in DB from prior iterations.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 3 was a targeted backend-only verification of the /api/admin/sales projection optimization. Providers now expected: stripe:true, mercadopago:true, flow:true (Flow keys are now populated in /app/backend/.env). Do NOT complete MP or Flow payments — both are PRODUCTION credentials. Existing pytest at /app/backend/tests/backend_test.py from iteration 2 still expects flow:false and returning 503 for /payments/checkout provider=flow; if re-run it will fail on TestProviders.test_providers_metadata and TestFlowCheckout.* — those tests need updating to reflect current Flow-enabled configuration. Use /app/backend/tests/test_admin_sales.py as the source of truth for iteration 3.",
+  "rca_of_issue": "No issue found. MongoDB projection is correctly restricting fields; response schema, auth guard, and aggregation math all verified end-to-end via public URL https://rapa-nui-routes.preview.emergentagent.com/api/admin/sales."
+}

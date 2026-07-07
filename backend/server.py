@@ -385,7 +385,8 @@ async def admin_sales(request: Request):
         raise HTTPException(status_code=401, detail="Clave de administrador incorrecta")
 
     paid = await db.payment_transactions.find(
-        {"payment_status": "paid"}
+        {"payment_status": "paid"},
+        {"provider": 1, "amount_clp": 1, "paid_at": 1, "device_id": 1},
     ).sort("paid_at", -1).to_list(500)
 
     by_provider: dict = {}
