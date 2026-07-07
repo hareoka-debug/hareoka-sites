@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import IslandMap from "@/src/components/IslandMap";
+import VaiBanner from "@/src/components/VaiBanner";
 import { useUserLocation } from "@/src/hooks/use-user-location";
 import {
   RouteData,
@@ -313,17 +314,22 @@ export default function MapScreen() {
       ) : null}
 
       {selectedRoute ? (
-        <Pressable
-          style={[styles.selectedBanner, { top: insets.top + spacing.md + 64 }]}
-          onPress={() => router.push(`/route/${selectedRoute.id}`)}
-          testID="selected-route-banner"
-        >
-          <View style={[styles.dot, { backgroundColor: selectedRoute.color }]} />
-          <Text style={styles.selectedName} numberOfLines={1}>
-            {selectedRoute.name}
-          </Text>
-          <Feather name="chevron-right" size={16} color={colors.brand} />
-        </Pressable>
+        <>
+          <Pressable
+            style={[styles.selectedBanner, { top: insets.top + spacing.md + 64 }]}
+            onPress={() => router.push(`/route/${selectedRoute.id}`)}
+            testID="selected-route-banner"
+          >
+            <View style={[styles.dot, { backgroundColor: selectedRoute.color }]} />
+            <Text style={styles.selectedName} numberOfLines={1}>
+              {selectedRoute.name}
+            </Text>
+            <Feather name="chevron-right" size={16} color={colors.brand} />
+          </Pressable>
+          <View style={[styles.vaiWrap, { top: insets.top + spacing.md + 64 + 54 }]}>
+            <VaiBanner onPress={() => router.push(`/route/${selectedRoute.id}`)} />
+          </View>
+        </>
       ) : null}
 
       <BottomSheet
@@ -439,6 +445,7 @@ const styles = StyleSheet.create({
   },
   dot: { width: 10, height: 10, borderRadius: 5 },
   selectedName: { flex: 1, fontSize: 13, fontWeight: "600", color: colors.onSurface },
+  vaiWrap: { position: "absolute", left: spacing.lg, right: spacing.lg },
   sheetBg: { backgroundColor: colors.surface, borderRadius: radius.lg },
   filters: {
     flexDirection: "row",

@@ -56,6 +56,7 @@
 - [x] Revisión de despliegue PASS (se agregó --tunnel a supervisor + @expo/ngrok global; se eliminaron endpoints boilerplate /api/status)
 - [x] GPS en tiempo real: hook src/hooks/use-user-location.ts (expo-location watchPositionAsync), FAB "locate-button" en /map con flujo de permisos contextual (pre-explicación → request → denied/blocked → Abrir Ajustes), punto de usuario en ambos mapas (nativo anima cámara al primer fix; web dibuja punto si está dentro de la isla, aviso si está fuera). Permisos declarados en app.json (iOS infoPlist + Android).
 - [x] Distancia desde la posición del usuario al inicio de cada ruta en las tarjetas de la lista ("Inicio a X km/m de ti", haversine, visible solo con GPS activo).
+- [x] Banner publicitario "Agua Vai Nativa": componente src/components/VaiBanner.tsx con 5 mensajes rotativos (fade cada 6s). Aparece en el detalle de cada ruta (al visitar un sitio) y en el mapa cuando hay ruta seleccionada (con tap → detalle).
 
 ## Notas
 - STRIPE_API_KEY agregada a /app/backend/.env ("sk_test_emergent").

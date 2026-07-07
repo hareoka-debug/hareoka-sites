@@ -20,6 +20,7 @@ import {
   fetchRoute,
   fetchWaterPoints,
 } from "@/src/lib/api";
+import VaiBanner from "@/src/components/VaiBanner";
 import { colors, difficultyColor, poiColor, poiIcon, radius, serif, spacing } from "@/src/lib/theme";
 
 export default function RouteDetail() {
@@ -118,6 +119,10 @@ export default function RouteDetail() {
           </View>
         </View>
 
+        <View style={[styles.section, { marginTop: spacing.lg }]}>
+          <VaiBanner />
+        </View>
+
         <View style={styles.section}>
           <Text style={styles.body}>{route.description}</Text>
         </View>
@@ -181,7 +186,7 @@ export default function RouteDetail() {
           style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            router.push({ pathname: "/map", params: { selected: route.id } });
+            router.navigate({ pathname: "/map", params: { selected: route.id } });
           }}
           testID="view-on-map"
         >
