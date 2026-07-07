@@ -38,7 +38,7 @@
 - GET /api/payments/status/{tx_id} → acepta tx_id interno o session_id; branch por provider
 - Webhooks: /api/webhook/stripe, /api/webhook/mercadopago, /api/webhook/flow; retorno Flow: /api/payments/flow/return (POST→303 redirect)
 - Mercado Pago: Access Token de PRODUCCIÓN del usuario en backend/.env (MP_ACCESS_TOKEN, APP_USR-...). Preferencias verificadas OK. Los pagos caen en su cuenta MP.
-- Flow: PENDIENTE credenciales del usuario (FLOW_API_KEY/FLOW_SECRET_KEY vacías en .env; FLOW_API_URL=https://www.flow.cl/api, cambiar a sandbox.flow.cl/api para pruebas). La UI oculta Flow hasta configurarlo.
+- Flow: credenciales de PRODUCCIÓN del usuario configuradas (FLOW_API_KEY/FLOW_SECRET_KEY en backend/.env, FLOW_API_URL=https://www.flow.cl/api). Verificado: orden creada y página de pago Flow muestra "$3.000 CLP" con Webpay/bancos. Flow valida que el email exista (error claro si es inválido). Los pagos se DEPOSITAN en la cuenta bancaria del usuario (1-3 días hábiles).
 - Paywall: selector de método (testID method-*), input email para Flow, precio $3.000 CLP.
 - NOTA entorno: expo --tunnel requiere @expo/ngrok instalado globalmente (sudo npm i -g @expo/ngrok); se reinstaló tras reinicio del pod.
 

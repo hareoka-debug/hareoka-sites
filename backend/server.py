@@ -6,7 +6,6 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import hashlib
 import hmac
-import json
 import logging
 import httpx
 from pathlib import Path
@@ -208,10 +207,22 @@ async def create_payment_checkout(body: CheckoutRequest, request: Request):
             "email": body.email,
             "urlConfirmation": f"{host_url}/api/webhook/flow",
             "urlReturn": f"{host_url}/api/payments/flow/return",
-            "optional": json.dumps({"device_id": body.device_id}),
         }
         try:
             result = await _flow_call("payment/create", params)
+        except httpx.HTTPStatusError as e:
+            detail = ""
+            try:
+                detail = e.response.json().get("message", "")
+            except Exception:
+                pass
+            logger.error(f"Flow error: {e} {detail}")
+            if "email" in detail.lower():
+                raise HTTPException(
+                    status_code=400,
+                    detail="El email ingresado no es válido para Flow. Usa un correo real.",
+                )
+            raise HTTPException(status_code=502, detail="No se pudo iniciar el pago con Flow")
         except Exception as e:
             logger.error(f"Flow error: {e}")
             raise HTTPException(status_code=502, detail="No se pudo iniciar el pago con Flow")
