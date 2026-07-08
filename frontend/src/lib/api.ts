@@ -103,6 +103,20 @@ export async function createCheckout(
   return res.json() as Promise<{ url: string; tx_id: string }>;
 }
 
+export async function restoreByEmail(email: string, deviceId: string): Promise<boolean> {
+  const res = await fetch(`${BASE}/api/payments/restore`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, device_id: deviceId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.detail || `Error ${res.status}`);
+  }
+  const data = await res.json();
+  return data.has_access;
+}
+
 export async function checkPaymentStatus(txId: string) {
   return get<{ status: string; payment_status: string }>(`/payments/status/${txId}`);
 }

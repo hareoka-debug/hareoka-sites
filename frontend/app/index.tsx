@@ -28,9 +28,11 @@ import {
   getDeviceId,
   getLocalPaid,
   getPendingSession,
+  restoreByEmail,
   setLocalPaid,
   setPendingSession,
 } from "@/src/lib/api";
+import { storage } from "@/src/utils/storage";
 import { colors, radius, serif, spacing } from "@/src/lib/theme";
 
 const HERO =
@@ -58,6 +60,19 @@ export default function Paywall() {
   const [providers, setProviders] = useState<Providers | null>(null);
   const [method, setMethod] = useState<string>("mercadopago");
   const [email, setEmail] = useState("");
+  const [showRestore, setShowRestore] = useState(false);
+  const [restoreEmail, setRestoreEmail] = useState("");
+
+  // Pedir al navegador (iPhone/Safari incluido) que NO borre los datos de la app
+  useEffect(() => {
+    if (Platform.OS === "web" && typeof navigator !== "undefined") {
+      try {
+        (navigator as any).storage?.persist?.();
+      } catch {
+        // no soportado: se ignora
+      }
+    }
+  }, []);
 
   const verifyAccess = useCallback(async (): Promise<boolean> => {
     const localPaid = await getLocalPaid();
@@ -112,19 +127,20 @@ export default function Paywall() {
 
   const handlePay = async () => {
     setError(null);
-    if (method === "flow" && !/^\S+@\S+\.\S+$/.test(email.trim())) {
-      setError("Ingresa un email válido para el comprobante de Flow.");
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
+      setError("Ingresa un email válido: es tu respaldo para recuperar la compra.");
       return;
     }
     setPaying(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       const deviceId = await getDeviceId();
+      await storage.setItem("rapa-nui-email", email.trim().toLowerCase());
       const origin =
         Platform.OS === "web" && typeof window !== "undefined"
           ? window.location.origin
           : (process.env.EXPO_PUBLIC_BACKEND_URL as string);
-      const { url, tx_id } = await createCheckout(deviceId, origin, method, email.trim() || undefined);
+      const { url, tx_id } = await createCheckout(deviceId, origin, method, email.trim());
       await setPendingSession(tx_id);
       if (Platform.OS === "web" && typeof window !== "undefined") {
         window.location.href = url;
@@ -142,15 +158,39 @@ export default function Paywall() {
   };
 
   const handleRestore = async () => {
-    setRestoring(true);
     setError(null);
-    const ok = await verifyAccess();
-    if (ok) {
-      router.replace("/map");
-    } else {
-      setError("No encontramos un pago para este dispositivo.");
+    if (!showRestore) {
+      const saved = await storage.getItem("rapa-nui-email", "");
+      setRestoreEmail(saved || "");
+      setShowRestore(true);
+      return;
     }
-    setRestoring(false);
+    if (!/^\S+@\S+\.\S+$/.test(restoreEmail.trim())) {
+      setError("Ingresa el email con el que pagaste.");
+      return;
+    }
+    setRestoring(true);
+    try {
+      const deviceId = await getDeviceId();
+      // 1) Restaurar por email (funciona aunque el teléfono haya borrado los datos)
+      const okEmail = await restoreByEmail(restoreEmail.trim().toLowerCase(), deviceId);
+      if (okEmail) {
+        await setLocalPaid();
+        router.replace("/map");
+        return;
+      }
+      // 2) Respaldo: verificación clásica por dispositivo / sesión pendiente
+      const ok = await verifyAccess();
+      if (ok) {
+        router.replace("/map");
+        return;
+      }
+      setError("No encontramos un pago con ese email.");
+    } catch {
+      setError("Error de conexión. Intenta de nuevo.");
+    } finally {
+      setRestoring(false);
+    }
   };
 
   if (checking) {
@@ -220,18 +260,16 @@ export default function Paywall() {
             })}
           </View>
 
-          {method === "flow" ? (
-            <TextInput
-              style={styles.emailInput}
-              placeholder="Tu email (para el comprobante)"
-              placeholderTextColor="rgba(249,248,246,0.5)"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              testID="flow-email-input"
-            />
-          ) : null}
+          <TextInput
+            style={styles.emailInput}
+            placeholder="Tu email (respaldo para recuperar tu compra)"
+            placeholderTextColor="rgba(249,248,246,0.5)"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            testID="pay-email-input"
+          />
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -249,9 +287,26 @@ export default function Paywall() {
           </Pressable>
           <Text style={styles.finePrint}>Pago único por dispositivo · Pago seguro · Sin suscripciones</Text>
 
-          <Pressable onPress={handleRestore} disabled={restoring} hitSlop={12} style={styles.restore}>
+          {showRestore ? (
+            <TextInput
+              style={[styles.emailInput, { marginTop: spacing.lg }]}
+              placeholder="Email con el que pagaste"
+              placeholderTextColor="rgba(249,248,246,0.5)"
+              value={restoreEmail}
+              onChangeText={setRestoreEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              testID="restore-email-input"
+            />
+          ) : null}
+
+          <Pressable onPress={handleRestore} disabled={restoring} hitSlop={12} style={styles.restore} testID="restore-button">
             <Text style={styles.restoreText}>
-              {restoring ? "Verificando..." : "¿Ya pagaste en este dispositivo? Restaurar acceso"}
+              {restoring
+                ? "Verificando..."
+                : showRestore
+                  ? "Verificar y restaurar acceso"
+                  : "¿Ya pagaste? Restaurar acceso con tu email"}
             </Text>
           </Pressable>
         </ScrollView>

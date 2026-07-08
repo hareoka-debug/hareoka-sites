@@ -6,6 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import hashlib
 import hmac
+import re
 import logging
 import httpx
 from pathlib import Path
@@ -126,6 +127,9 @@ async def payment_providers():
 
 @api_router.post("/payments/checkout")
 async def create_payment_checkout(body: CheckoutRequest, request: Request):
+    email = (body.email or "").strip().lower()
+    if not re.match(r"^\S+@\S+\.\S+$", email):
+        raise HTTPException(status_code=400, detail="Se requiere un email válido para respaldar tu compra")
     origin = body.origin_url.rstrip("/")
     host_url = str(request.base_url).rstrip("/")
     tx_id = str(uuid.uuid4())
@@ -133,6 +137,7 @@ async def create_payment_checkout(body: CheckoutRequest, request: Request):
         "id": tx_id,
         "provider": body.provider,
         "device_id": body.device_id,
+        "email": email,
         "origin_url": origin,
         "amount_clp": PRICE_CLP_DISPLAY,
         "currency": "clp",
@@ -197,14 +202,12 @@ async def create_payment_checkout(body: CheckoutRequest, request: Request):
     elif body.provider == "flow":
         if not (FLOW_API_KEY and FLOW_SECRET_KEY):
             raise HTTPException(status_code=503, detail="Flow no está configurado aún")
-        if not body.email:
-            raise HTTPException(status_code=400, detail="Flow requiere un email para el comprobante")
         params = {
             "commerceOrder": tx_id,
             "subject": "Guía Rutas Rapa Nui",
             "currency": "CLP",
             "amount": PRICE_CLP_DISPLAY,
-            "email": body.email,
+            "email": email,
             "urlConfirmation": f"{host_url}/api/webhook/flow",
             "urlReturn": f"{host_url}/api/payments/flow/return",
         }
@@ -304,7 +307,36 @@ async def check_access(device_id: str):
     doc = await db.payment_transactions.find_one(
         {"device_id": device_id, "payment_status": "paid"}
     )
+    if not doc:
+        doc = await db.access_grants.find_one({"device_id": device_id})
     return {"has_access": doc is not None}
+
+
+class RestoreRequest(BaseModel):
+    email: str
+    device_id: str
+
+
+@api_router.post("/payments/restore")
+async def restore_by_email(body: RestoreRequest):
+    """Verifica el acceso mediante el email usado en la compra y lo vincula a este dispositivo."""
+    email = body.email.strip().lower()
+    if not re.match(r"^\S+@\S+\.\S+$", email):
+        raise HTTPException(status_code=400, detail="Email inválido")
+    paid = await db.payment_transactions.find_one({"email": email, "payment_status": "paid"})
+    if not paid:
+        return {"has_access": False}
+    await db.access_grants.update_one(
+        {"device_id": body.device_id},
+        {"$set": {
+            "device_id": body.device_id,
+            "email": email,
+            "source_tx": paid["id"],
+            "granted_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    return {"has_access": True}
 
 
 # --- Retorno de Flow (Flow redirige al pagador vía POST con el token) ---
