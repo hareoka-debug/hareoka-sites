@@ -39,13 +39,16 @@ export default function IslandMap({ routes, waterPoints, selectedRouteId, onSele
     <MapView
       ref={mapRef}
       style={StyleSheet.absoluteFill}
-      initialRegion={{
-        latitude: -27.125,
-        longitude: -109.345,
-        latitudeDelta: 0.18,
-        longitudeDelta: 0.3,
+      initialCamera={{
+        center: { latitude: -27.125, longitude: -109.345 },
+        pitch: 45,
+        heading: 0,
+        altitude: 22000,
+        zoom: 12,
       }}
-      mapType="standard"
+      mapType="hybrid"
+      showsBuildings
+      pitchEnabled
     >
       {routes.map((r) => (
         <Polyline

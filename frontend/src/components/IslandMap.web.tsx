@@ -1,8 +1,16 @@
-// Versión web del mapa: la isla se dibuja como SVG interactivo
-// (react-native-maps no funciona en web).
+// Versión web del mapa: imagen satelital real de Rapa Nui (ESRI World Imagery,
+// proyección EPSG:4326 que calza con la proyección lineal usada abajo) con las
+// rutas y marcadores superpuestos en SVG interactivo.
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import Svg, { Polygon, Polyline, Circle, Text as SvgText, G } from "react-native-svg";
+import Svg, {
+  Image as SvgImage,
+  Polyline,
+  Circle,
+  Text as SvgText,
+  G,
+  Rect,
+} from "react-native-svg";
 
 import { RouteData, WaterPoint } from "@/src/lib/api";
 import { colors, poiColor } from "@/src/lib/theme";
@@ -22,37 +30,13 @@ const LON_MAX = -109.2;
 const LAT_TOP = -27.02;
 const LAT_BOTTOM = -27.22;
 
+const SATELLITE_URL =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export" +
+  `?bbox=${LON_MIN},${LAT_BOTTOM},${LON_MAX},${LAT_TOP}` +
+  `&bboxSR=4326&imageSR=4326&size=${W},${H}&format=jpg&f=image`;
+
 const px = (lng: number) => ((lng - LON_MIN) / (LON_MAX - LON_MIN)) * W;
 const py = (lat: number) => ((LAT_TOP - lat) / (LAT_TOP - LAT_BOTTOM)) * H;
-
-// Contorno aproximado (triangular) de Rapa Nui
-const ISLAND: [number, number][] = [
-  [-27.055, -109.375],
-  [-27.062, -109.345],
-  [-27.07, -109.325],
-  [-27.078, -109.295],
-  [-27.08, -109.27],
-  [-27.088, -109.24],
-  [-27.095, -109.225],
-  [-27.11, -109.23],
-  [-27.125, -109.25],
-  [-27.135, -109.27],
-  [-27.145, -109.3],
-  [-27.155, -109.33],
-  [-27.165, -109.36],
-  [-27.178, -109.4],
-  [-27.2, -109.435],
-  [-27.19, -109.452],
-  [-27.175, -109.455],
-  [-27.155, -109.446],
-  [-27.14, -109.436],
-  [-27.12, -109.442],
-  [-27.1, -109.443],
-  [-27.08, -109.428],
-  [-27.065, -109.408],
-];
-
-const islandPoints = ISLAND.map(([lat, lng]) => `${px(lng)},${py(lat)}`).join(" ");
 
 const isOnIsland = (lat: number, lng: number) =>
   lat <= LAT_TOP && lat >= LAT_BOTTOM && lng >= LON_MIN && lng <= LON_MAX;
@@ -62,20 +46,38 @@ export default function IslandMap({ routes, waterPoints, selectedRouteId, onSele
 
   return (
     <View style={styles.container}>
-      <Svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
-        <Polygon points={islandPoints} fill="#EFEAE0" stroke={colors.borderStrong} strokeWidth={3} />
+      <Svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMin meet">
+        <Rect x={0} y={0} width={W} height={H} fill="#12222B" />
+        <SvgImage
+          href={{ uri: SATELLITE_URL }}
+          x={0}
+          y={0}
+          width={W}
+          height={H}
+          preserveAspectRatio="none"
+        />
 
         {routes.map((r) => {
           const pts = r.path.map(([lat, lng]) => `${px(lng)},${py(lat)}`).join(" ");
           const isSel = selectedRouteId === r.id;
           return (
             <G key={r.id}>
+              {/* halo blanco para contraste sobre el satélite */}
+              <Polyline
+                points={pts}
+                fill="none"
+                stroke="#FFFFFF"
+                strokeWidth={isSel ? 11 : 7}
+                strokeOpacity={selectedRouteId && !isSel ? 0.25 : 0.85}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
               <Polyline
                 points={pts}
                 fill="none"
                 stroke={r.color}
-                strokeWidth={isSel ? 8 : 4}
-                strokeOpacity={selectedRouteId && !isSel ? 0.35 : 1}
+                strokeWidth={isSel ? 7 : 4}
+                strokeOpacity={selectedRouteId && !isSel ? 0.45 : 1}
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -115,8 +117,10 @@ export default function IslandMap({ routes, waterPoints, selectedRouteId, onSele
               x={px(p.lng)}
               y={py(p.lat) - 16}
               fontSize={15}
-              fontWeight="600"
-              fill={colors.onSurface}
+              fontWeight="700"
+              fill="#FFFFFF"
+              stroke="#12222B"
+              strokeWidth={0.8}
               textAnchor="middle"
             >
               {p.name}
@@ -130,14 +134,14 @@ export default function IslandMap({ routes, waterPoints, selectedRouteId, onSele
               cx={px(userLocation.lng)}
               cy={py(userLocation.lat)}
               r={16}
-              fill={colors.info}
-              fillOpacity={0.25}
+              fill="#5FB6E8"
+              fillOpacity={0.3}
             />
             <Circle
               cx={px(userLocation.lng)}
               cy={py(userLocation.lat)}
               r={7}
-              fill={colors.info}
+              fill="#5FB6E8"
               stroke="#fff"
               strokeWidth={2.5}
             />
@@ -151,7 +155,7 @@ export default function IslandMap({ routes, waterPoints, selectedRouteId, onSele
 const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#DCE4E7",
+    backgroundColor: "#12222B",
     alignItems: "center",
     justifyContent: "center",
   },
