@@ -56,6 +56,13 @@
 - Editor UI: pestaña "Puntos Vai" en /admin (src/components/WaterPointsEditor.tsx) con chips de sector predefinidos (7 sectores de la isla) en vez de lat/lng manual.
 - Detalle de ruta: muestra buy_point_ids + puntos custom a ≤5 km del path (src/lib/geo.ts compartido).
 
+## Persistencia de pago por email (iteración 6 — bug fix ALL PASS)
+- Email obligatorio en todo pago (guardado lowercase en payment_transactions.email).
+- POST /api/payments/restore {email, device_id} → verifica pago por email y vincula el dispositivo en colección access_grants; /api/payments/access/{device_id} revisa transacciones + access_grants.
+- Paywall: pay-email-input siempre visible; restore-button (2 pasos) con restore-email-input; email guardado en storage "rapa-nui-email".
+- Web: navigator.storage.persist() al montar el paywall (pide a iOS/Safari no borrar datos).
+- Verificado E2E por testing_agent: pagar → borrar localStorage → restaurar por email SIN pagar de nuevo.
+
 ## Estado
 - [x] Backend rutas + pagos implementado y verificado con curl (checkout crea sesión Stripe real de prueba)
 - [x] Frontend completo (paywall, mapa, detalle, éxito de pago)
