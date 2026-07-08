@@ -24,6 +24,10 @@ import VaiBanner from "@/src/components/VaiBanner";
 import { colors, difficultyColor, poiColor, poiIcon, radius, serif, spacing } from "@/src/lib/theme";
 import { distanceKm } from "@/src/lib/geo";
 
+// Formato de coordenada georreferenciada: -27.1258, -109.2768 → "27.1258° S · 109.2768° O"
+const geoRef = (lat: number, lng: number) =>
+  `${Math.abs(lat).toFixed(4)}° S · ${Math.abs(lng).toFixed(4)}° O`;
+
 export default function RouteDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -31,6 +35,7 @@ export default function RouteDetail() {
   const [route, setRoute] = useState<RouteData | null>(null);
   const [waterPoints, setWaterPoints] = useState<WaterPoint[]>([]);
   const [error, setError] = useState(false);
+  const [expandedPoi, setExpandedPoi] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(false);
@@ -134,17 +139,54 @@ export default function RouteDetail() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Puntos de Interés</Text>
-          {route.pois.map((p) => (
-            <View key={p.name} style={styles.poiRow}>
-              <View style={[styles.poiIcon, { backgroundColor: poiColor(p.type) }]}>
-                <Feather name={poiIcon(p.type)} size={14} color="#fff" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.poiName}>{p.name}</Text>
-                <Text style={styles.poiDesc}>{p.description}</Text>
-              </View>
-            </View>
-          ))}
+          {route.pois.map((p) => {
+            const expanded = expandedPoi === p.name;
+            return (
+              <Pressable
+                key={p.name}
+                style={styles.poiCard}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setExpandedPoi(expanded ? null : p.name);
+                }}
+                testID={`poi-${p.name}`}
+              >
+                <View style={styles.poiRow}>
+                  {p.photo ? (
+                    <Image source={{ uri: p.photo }} style={styles.poiThumb} contentFit="cover" transition={200} />
+                  ) : (
+                    <View style={[styles.poiIcon, { backgroundColor: poiColor(p.type) }]}>
+                      <Feather name={poiIcon(p.type)} size={14} color="#fff" />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.poiName}>{p.name}</Text>
+                    <View style={styles.geoRow}>
+                      <Feather name="map-pin" size={10} color={colors.info} />
+                      <Text style={styles.geoText}>{geoRef(p.lat, p.lng)}</Text>
+                    </View>
+                    <Text style={styles.poiDesc} numberOfLines={expanded ? undefined : 2}>
+                      {p.description}
+                    </Text>
+                  </View>
+                  <Feather
+                    name={expanded ? "chevron-up" : "chevron-down"}
+                    size={16}
+                    color={colors.onSurfaceTertiary}
+                  />
+                </View>
+                {expanded && p.photo ? (
+                  <View style={styles.poiPhotoWrap}>
+                    <Image source={{ uri: p.photo }} style={styles.poiPhoto} contentFit="cover" transition={300} />
+                    <View style={styles.geoBadge}>
+                      <Feather name="crosshair" size={11} color="#fff" />
+                      <Text style={styles.geoBadgeText}>Foto real · {geoRef(p.lat, p.lng)}</Text>
+                    </View>
+                  </View>
+                ) : null}
+              </Pressable>
+            );
+          })}
         </View>
 
         <View style={styles.section}>
@@ -269,7 +311,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   body: { fontSize: 15, lineHeight: 24, color: colors.onSurfaceSecondary },
-  poiRow: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.lg },
+  poiCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    backgroundColor: colors.surface,
+  },
+  poiRow: { flexDirection: "row", gap: spacing.md, alignItems: "flex-start" },
+  poiThumb: { width: 62, height: 62, borderRadius: radius.sm, backgroundColor: colors.surfaceTertiary },
   poiIcon: {
     width: 30,
     height: 30,
@@ -279,7 +330,24 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   poiName: { fontSize: 15, fontWeight: "600", color: colors.onSurface },
+  geoRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  geoText: { fontSize: 11, color: colors.info, fontWeight: "600" },
   poiDesc: { fontSize: 13, lineHeight: 19, color: colors.onSurfaceTertiary, marginTop: 2 },
+  poiPhotoWrap: { marginTop: spacing.md, borderRadius: radius.md, overflow: "hidden" },
+  poiPhoto: { width: "100%", height: 190 },
+  geoBadge: {
+    position: "absolute",
+    left: spacing.sm,
+    bottom: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(18,34,43,0.75)",
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  geoBadgeText: { color: "#fff", fontSize: 10, fontWeight: "600" },
   vaiCard: {
     backgroundColor: colors.brandTertiary,
     borderRadius: radius.lg,

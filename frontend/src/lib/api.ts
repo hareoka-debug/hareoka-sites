@@ -8,6 +8,7 @@ export interface Poi {
   lat: number;
   lng: number;
   description: string;
+  photo?: string;
 }
 
 export interface VaiInfo {

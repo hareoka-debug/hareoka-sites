@@ -65,6 +65,7 @@
 - [x] Distancia desde la posición del usuario al inicio de cada ruta en las tarjetas de la lista ("Inicio a X km/m de ti", haversine, visible solo con GPS activo).
 - [x] Banner publicitario "Agua Vai Nativa": componente src/components/VaiBanner.tsx con 5 mensajes rotativos (fade cada 6s). Aparece en el detalle de cada ruta (al visitar un sitio) y en el mapa cuando hay ruta seleccionada (con tap → detalle).
 - [x] Mapa satelital estilo Google Earth: web usa imagen satelital real ESRI World Imagery (export EPSG:4326 que calza con la proyección lineal, SvgImage de fondo, halos blancos en rutas, labels blancos, preserveAspectRatio xMidYMin). Nativo usa mapType="hybrid" con cámara inclinada 3D (pitch 45°, initialCamera) y showsBuildings — verificar en Expo Go.
+- [x] Fotos reales georreferenciadas en los 41 POIs: campo "photo" en routes_data.py con imágenes reales de Wikimedia Commons (verificadas 200 OK, thumbs 1280px). UI: miniatura en cada POI + coordenadas "XX.XXXX° S · XXX.XXXX° O" siempre visibles; tap expande foto grande con badge "Foto real · coordenadas".
 
 ## Notas
 - STRIPE_API_KEY agregada a /app/backend/.env ("sk_test_emergent").

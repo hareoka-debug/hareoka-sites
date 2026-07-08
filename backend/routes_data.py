@@ -83,11 +83,11 @@ ROUTES = [
             [-27.1390, -109.4280], [-27.1355, -109.4265],
         ],
         "pois": [
-            {"name": "Caleta Hanga Roa Otai", "type": "cultural", "lat": -27.1499, "lng": -109.4335, "description": "Caleta de pescadores con un moai solitario mirando al mar."},
-            {"name": "Iglesia Santa Cruz", "type": "cultural", "lat": -27.1489, "lng": -109.4305, "description": "Tallados que mezclan santos católicos con el hombre-pájaro Tangata Manu."},
-            {"name": "Feria Municipal", "type": "cultural", "lat": -27.1486, "lng": -109.4308, "description": "Artesanía en madera de toromiro, collares de conchas y fruta local."},
-            {"name": "Complejo Ceremonial Tahai", "type": "moai", "lat": -27.1355, "lng": -109.4265, "description": "Ahu Vai Uri, Ahu Tahai y el moai Ko Te Riku con ojos restaurados."},
-            {"name": "Museo Antropológico P. Sebastián Englert", "type": "arqueologico", "lat": -27.1335, "lng": -109.4245, "description": "El único ojo de moai original encontrado y tablillas Rongo Rongo."},
+            {"name": "Caleta Hanga Roa Otai", "type": "cultural", "lat": -27.1499, "lng": -109.4335, "description": "Caleta de pescadores con un moai solitario mirando al mar.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Hanga_Roa_Harbour.jpg/1280px-Hanga_Roa_Harbour.jpg"},
+            {"name": "Iglesia Santa Cruz", "type": "cultural", "lat": -27.1489, "lng": -109.4305, "description": "Tallados que mezclan santos católicos con el hombre-pájaro Tangata Manu.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Hanga_Roa_Catholic_Church_exterior_2.JPG/1280px-Hanga_Roa_Catholic_Church_exterior_2.JPG"},
+            {"name": "Feria Municipal", "type": "cultural", "lat": -27.1486, "lng": -109.4308, "description": "Artesanía en madera de toromiro, collares de conchas y fruta local.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Hanga_Roa_Harbour.jpg/1280px-Hanga_Roa_Harbour.jpg"},
+            {"name": "Complejo Ceremonial Tahai", "type": "moai", "lat": -27.1355, "lng": -109.4265, "description": "Ahu Vai Uri, Ahu Tahai y el moai Ko Te Riku con ojos restaurados.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Sochy_na_Velikono%C4%8Dn%C3%ADm_ostrov%C4%9B_-_Tahai%2C_v_pop%C5%99ed%C3%AD_Ahu_Tahai%2C_v_pozad%C3%AD_Ahu_Vai_Uri_-_panoramio.jpg/1280px-Sochy_na_Velikono%C4%8Dn%C3%ADm_ostrov%C4%9B_-_Tahai%2C_v_pop%C5%99ed%C3%AD_Ahu_Tahai%2C_v_pozad%C3%AD_Ahu_Vai_Uri_-_panoramio.jpg"},
+            {"name": "Museo Antropológico P. Sebastián Englert", "type": "arqueologico", "lat": -27.1335, "lng": -109.4245, "description": "El único ojo de moai original encontrado y tablillas Rongo Rongo.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7c/Museo_Sebastian_Englert.JPG/1280px-Museo_Sebastian_Englert.JPG"},
         ],
         "vai": {
             "recommended_liters": "1 litro por persona",
@@ -116,10 +116,10 @@ ROUTES = [
             [-27.1573, -109.4374],
         ],
         "pois": [
-            {"name": "Playa Pea", "type": "playa", "lat": -27.1505, "lng": -109.4340, "description": "Piscina natural protegida, perfecta para un chapuzón urbano."},
-            {"name": "Hanga Vare Vare", "type": "cultural", "lat": -27.1450, "lng": -109.4320, "description": "Explanada ceremonial de la fiesta Tapati Rapa Nui."},
-            {"name": "Caleta Hanga Piko", "type": "cultural", "lat": -27.1573, "lng": -109.4374, "description": "Puerto de cargas con el Ahu Riata restaurado."},
-            {"name": "Punto de surf Hanga Roa", "type": "mirador", "lat": -27.1490, "lng": -109.4345, "description": "Observa a los surfistas locales en olas de clase mundial."},
+            {"name": "Playa Pea", "type": "playa", "lat": -27.1505, "lng": -109.4340, "description": "Piscina natural protegida, perfecta para un chapuzón urbano.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Hanga_Roa_Harbour.jpg/1280px-Hanga_Roa_Harbour.jpg"},
+            {"name": "Hanga Vare Vare", "type": "cultural", "lat": -27.1450, "lng": -109.4320, "description": "Explanada ceremonial de la fiesta Tapati Rapa Nui.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Hanga_Roa_Harbour.jpg/1280px-Hanga_Roa_Harbour.jpg"},
+            {"name": "Caleta Hanga Piko", "type": "cultural", "lat": -27.1573, "lng": -109.4374, "description": "Puerto de cargas con el Ahu Riata restaurado.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Chile-02919_-_Hanga_Piko_%2849072729591%29.jpg/1280px-Chile-02919_-_Hanga_Piko_%2849072729591%29.jpg"},
+            {"name": "Punto de surf Hanga Roa", "type": "mirador", "lat": -27.1490, "lng": -109.4345, "description": "Observa a los surfistas locales en olas de clase mundial.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Hanga_Roa_Harbour.jpg/1280px-Hanga_Roa_Harbour.jpg"},
         ],
         "vai": {
             "recommended_liters": "1 litro por persona",
@@ -146,8 +146,8 @@ ROUTES = [
             [-27.1600, -109.4380], [-27.1640, -109.4410], [-27.1670, -109.4440],
         ],
         "pois": [
-            {"name": "Cueva Ana Kai Tangata", "type": "cueva", "lat": -27.1670, "lng": -109.4440, "description": "Pinturas rupestres del manutara sobre techo de lava."},
-            {"name": "Mirador Mataveri", "type": "mirador", "lat": -27.1620, "lng": -109.4400, "description": "Vista de la pista de aterrizaje más remota del mundo."},
+            {"name": "Cueva Ana Kai Tangata", "type": "cueva", "lat": -27.1670, "lng": -109.4440, "description": "Pinturas rupestres del manutara sobre techo de lava.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/Ana_Kai_Tangata_%286759003191%29.jpg/1280px-Ana_Kai_Tangata_%286759003191%29.jpg"},
+            {"name": "Mirador Mataveri", "type": "mirador", "lat": -27.1620, "lng": -109.4400, "description": "Vista de la pista de aterrizaje más remota del mundo.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Rano-Kau-Crater-Gap-2013.jpg/1280px-Rano-Kau-Crater-Gap-2013.jpg"},
         ],
         "vai": {
             "recommended_liters": "1,5 litros por persona",
@@ -176,10 +176,10 @@ ROUTES = [
             [-27.1820, -109.4370], [-27.1860, -109.4410], [-27.1885, -109.4430],
         ],
         "pois": [
-            {"name": "Mirador cráter Rano Kau", "type": "mirador", "lat": -27.1770, "lng": -109.4340, "description": "Laguna del cráter con microclima propio, de 1,6 km de diámetro."},
-            {"name": "Aldea Ceremonial Orongo", "type": "arqueologico", "lat": -27.1885, "lng": -109.4430, "description": "53 casas de piedra del culto Tangata Manu y petroglifos de Make Make."},
-            {"name": "Mirador Motu Nui", "type": "mirador", "lat": -27.1890, "lng": -109.4415, "description": "Vista de los tres motu donde anidaba el manutara."},
-            {"name": "Sendero Te Ara o Te Ao", "type": "cultural", "lat": -27.1680, "lng": -109.4355, "description": "Camino ceremonial ancestral de los participantes del rito."},
+            {"name": "Mirador cráter Rano Kau", "type": "mirador", "lat": -27.1770, "lng": -109.4340, "description": "Laguna del cráter con microclima propio, de 1,6 km de diámetro.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Rano-Kau-Crater-Gap-2013.jpg/1280px-Rano-Kau-Crater-Gap-2013.jpg"},
+            {"name": "Aldea Ceremonial Orongo", "type": "arqueologico", "lat": -27.1885, "lng": -109.4430, "description": "53 casas de piedra del culto Tangata Manu y petroglifos de Make Make.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Chile-03344_-_Subdivision..._%2849073146321%29.jpg/1280px-Chile-03344_-_Subdivision..._%2849073146321%29.jpg"},
+            {"name": "Mirador Motu Nui", "type": "mirador", "lat": -27.1890, "lng": -109.4415, "description": "Vista de los tres motu donde anidaba el manutara.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/Easter_Island_11.jpg/1280px-Easter_Island_11.jpg"},
+            {"name": "Sendero Te Ara o Te Ao", "type": "cultural", "lat": -27.1680, "lng": -109.4355, "description": "Camino ceremonial ancestral de los participantes del rito.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Rano-Kau-Crater-Gap-2013.jpg/1280px-Rano-Kau-Crater-Gap-2013.jpg"},
         ],
         "vai": {
             "recommended_liters": "2,5 litros por persona",
@@ -207,10 +207,10 @@ ROUTES = [
             [-27.0680, -109.3165], [-27.0665, -109.3155],
         ],
         "pois": [
-            {"name": "Playa Anakena", "type": "playa", "lat": -27.0730, "lng": -109.3230, "description": "Playa fundacional de Hotu Matu'a, con palmeras y aguas turquesa."},
-            {"name": "Ahu Nau Nau", "type": "moai", "lat": -27.0725, "lng": -109.3245, "description": "Siete moai con pukao y petroglifos, los mejor conservados de la isla."},
-            {"name": "Ahu Ature Huki", "type": "moai", "lat": -27.0735, "lng": -109.3225, "description": "Primer moai re-erguido (1956) por Thor Heyerdahl con 12 isleños."},
-            {"name": "Playa Ovahe", "type": "playa", "lat": -27.0665, "lng": -109.3155, "description": "Playa escondida de arena rosada bajo un acantilado de escoria."},
+            {"name": "Playa Anakena", "type": "playa", "lat": -27.0730, "lng": -109.3230, "description": "Playa fundacional de Hotu Matu'a, con palmeras y aguas turquesa.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Anakena-Ahu-Ature.jpg/1280px-Anakena-Ahu-Ature.jpg"},
+            {"name": "Ahu Nau Nau", "type": "moai", "lat": -27.0725, "lng": -109.3245, "description": "Siete moai con pukao y petroglifos, los mejor conservados de la isla.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Anakena-Ahu-Ature.jpg/1280px-Anakena-Ahu-Ature.jpg"},
+            {"name": "Ahu Ature Huki", "type": "moai", "lat": -27.0735, "lng": -109.3225, "description": "Primer moai re-erguido (1956) por Thor Heyerdahl con 12 isleños.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Anakena-Ahu-Ature.jpg/1280px-Anakena-Ahu-Ature.jpg"},
+            {"name": "Playa Ovahe", "type": "playa", "lat": -27.0665, "lng": -109.3155, "description": "Playa escondida de arena rosada bajo un acantilado de escoria.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Ovahe_Beach_-_Easter_Island_%285962068471%29.jpg/1280px-Ovahe_Beach_-_Easter_Island_%285962068471%29.jpg"},
         ],
         "vai": {
             "recommended_liters": "2 litros por persona",
@@ -238,10 +238,10 @@ ROUTES = [
             [-27.1250, -109.2800], [-27.1258, -109.2768],
         ],
         "pois": [
-            {"name": "Cantera Rano Raraku", "type": "arqueologico", "lat": -27.1215, "lng": -109.2885, "description": "397 moai en la ladera, incluido el moai arrodillado Tukuturi."},
-            {"name": "Moai El Gigante", "type": "moai", "lat": -27.1210, "lng": -109.2875, "description": "Moai inconcluso de 21,6 m y 270 toneladas, aún unido a la roca."},
-            {"name": "Ahu Tongariki", "type": "moai", "lat": -27.1258, "lng": -109.2768, "description": "15 moai monumentales; el mejor amanecer de la isla."},
-            {"name": "Moai Viajero", "type": "moai", "lat": -27.1262, "lng": -109.2790, "description": "Moai que viajó a Japón en 1982; hoy saluda a la entrada de Tongariki."},
+            {"name": "Cantera Rano Raraku", "type": "arqueologico", "lat": -27.1215, "lng": -109.2885, "description": "397 moai en la ladera, incluido el moai arrodillado Tukuturi.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Fabrica_de_Gigantes.jpg/1280px-Fabrica_de_Gigantes.jpg"},
+            {"name": "Moai El Gigante", "type": "moai", "lat": -27.1210, "lng": -109.2875, "description": "Moai inconcluso de 21,6 m y 270 toneladas, aún unido a la roca.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Fabrica_de_Gigantes.jpg/1280px-Fabrica_de_Gigantes.jpg"},
+            {"name": "Ahu Tongariki", "type": "moai", "lat": -27.1258, "lng": -109.2768, "description": "15 moai monumentales; el mejor amanecer de la isla.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/AhuTongariki15Moais.jpg/1280px-AhuTongariki15Moais.jpg"},
+            {"name": "Moai Viajero", "type": "moai", "lat": -27.1262, "lng": -109.2790, "description": "Moai que viajó a Japón en 1982; hoy saluda a la entrada de Tongariki.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/AhuTongariki15Moais.jpg/1280px-AhuTongariki15Moais.jpg"},
         ],
         "vai": {
             "recommended_liters": "2 litros por persona",
@@ -270,9 +270,9 @@ ROUTES = [
             [-27.0885, -109.3790],
         ],
         "pois": [
-            {"name": "Cumbre Maunga Terevaka", "type": "mirador", "lat": -27.0885, "lng": -109.3790, "description": "511 msnm, vista de 360° de toda la isla y el Pacífico infinito."},
-            {"name": "Cráter Rano Aroi", "type": "mirador", "lat": -27.0930, "lng": -109.3760, "description": "Pequeño humedal de altura, una de las 3 reservas de agua dulce."},
-            {"name": "Praderas de caballos salvajes", "type": "cultural", "lat": -27.1010, "lng": -109.3860, "description": "Miles de caballos en libertad pastan en las laderas."},
+            {"name": "Cumbre Maunga Terevaka", "type": "mirador", "lat": -27.0885, "lng": -109.3790, "description": "511 msnm, vista de 360° de toda la isla y el Pacífico infinito.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Top-of-Terevaka-2013.jpg/1280px-Top-of-Terevaka-2013.jpg"},
+            {"name": "Cráter Rano Aroi", "type": "mirador", "lat": -27.0930, "lng": -109.3760, "description": "Pequeño humedal de altura, una de las 3 reservas de agua dulce.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Top-of-Terevaka-2013.jpg/1280px-Top-of-Terevaka-2013.jpg"},
+            {"name": "Praderas de caballos salvajes", "type": "cultural", "lat": -27.1010, "lng": -109.3860, "description": "Miles de caballos en libertad pastan en las laderas.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/00/Easter_Island_2.jpg/1280px-Easter_Island_2.jpg"},
         ],
         "vai": {
             "recommended_liters": "3 litros por persona",
@@ -301,9 +301,9 @@ ROUTES = [
             [-27.1075, -109.3980], [-27.1060, -109.3980],
         ],
         "pois": [
-            {"name": "Ahu Akivi", "type": "moai", "lat": -27.1150, "lng": -109.3947, "description": "Los 7 exploradores: únicos moai orientados hacia el mar."},
-            {"name": "Cuevas Ana Te Pahu", "type": "cueva", "lat": -27.1060, "lng": -109.3980, "description": "7 km de tubos volcánicos con jardines manavai de plátanos."},
-            {"name": "Manavai (jardines de piedra)", "type": "arqueologico", "lat": -27.1070, "lng": -109.3975, "description": "Técnica agrícola ancestral en círculos de piedra."},
+            {"name": "Ahu Akivi", "type": "moai", "lat": -27.1150, "lng": -109.3947, "description": "Los 7 exploradores: únicos moai orientados hacia el mar.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/Wyspa_Wielkanocna_-_Ahu_a_Kivi.jpg/1280px-Wyspa_Wielkanocna_-_Ahu_a_Kivi.jpg"},
+            {"name": "Cuevas Ana Te Pahu", "type": "cueva", "lat": -27.1060, "lng": -109.3980, "description": "7 km de tubos volcánicos con jardines manavai de plátanos.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/Grotte_Ana_Te_Pahu_-_Velikono%C4%8Dn%C3%AD_ostrov_-_panoramio.jpg/1280px-Grotte_Ana_Te_Pahu_-_Velikono%C4%8Dn%C3%AD_ostrov_-_panoramio.jpg"},
+            {"name": "Manavai (jardines de piedra)", "type": "arqueologico", "lat": -27.1070, "lng": -109.3975, "description": "Técnica agrícola ancestral en círculos de piedra.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/Grotte_Ana_Te_Pahu_-_Velikono%C4%8Dn%C3%AD_ostrov_-_panoramio.jpg/1280px-Grotte_Ana_Te_Pahu_-_Velikono%C4%8Dn%C3%AD_ostrov_-_panoramio.jpg"},
         ],
         "vai": {
             "recommended_liters": "2 litros por persona",
@@ -332,10 +332,10 @@ ROUTES = [
             [-27.1110, -109.2430], [-27.1140, -109.2490],
         ],
         "pois": [
-            {"name": "Maunga Pu A Katiki", "type": "mirador", "lat": -27.0980, "lng": -109.2460, "description": "Cima del volcán más antiguo, 400 msnm de praderas doradas."},
-            {"name": "Moai sonriente (Ana O Keke)", "type": "moai", "lat": -27.1010, "lng": -109.2420, "description": "Pequeño moai con una insólita sonrisa tallada, escondido en el este."},
-            {"name": "Cueva de las Vírgenes", "type": "cueva", "lat": -27.0950, "lng": -109.2440, "description": "Cueva del ritual neru con petroglifos; acceso solo con guía."},
-            {"name": "Acantilados del Poike", "type": "mirador", "lat": -27.1140, "lng": -109.2490, "description": "Paredones de 150 m donde revientan las olas del Pacífico."},
+            {"name": "Maunga Pu A Katiki", "type": "mirador", "lat": -27.0980, "lng": -109.2460, "description": "Cima del volcán más antiguo, 400 msnm de praderas doradas.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/Poike.jpg/1280px-Poike.jpg"},
+            {"name": "Moai sonriente (Ana O Keke)", "type": "moai", "lat": -27.1010, "lng": -109.2420, "description": "Pequeño moai con una insólita sonrisa tallada, escondido en el este.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/Poike.jpg/1280px-Poike.jpg"},
+            {"name": "Cueva de las Vírgenes", "type": "cueva", "lat": -27.0950, "lng": -109.2440, "description": "Cueva del ritual neru con petroglifos; acceso solo con guía.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/Poike.jpg/1280px-Poike.jpg"},
+            {"name": "Acantilados del Poike", "type": "mirador", "lat": -27.1140, "lng": -109.2490, "description": "Paredones de 150 m donde revientan las olas del Pacífico.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/Poike.jpg/1280px-Poike.jpg"},
         ],
         "vai": {
             "recommended_liters": "3,5 litros por persona",
@@ -366,11 +366,11 @@ ROUTES = [
             [-27.0660, -109.3500], [-27.0680, -109.3350], [-27.0730, -109.3230],
         ],
         "pois": [
-            {"name": "Cueva Ana Kakenga", "type": "cueva", "lat": -27.1030, "lng": -109.4310, "description": "Túnel de lava con dos 'ventanas' colgadas sobre el mar."},
-            {"name": "Ahu Te Peu", "type": "arqueologico", "lat": -27.0980, "lng": -109.4270, "description": "Cimientos de hare paenga (casa-bote) del último ariki."},
-            {"name": "Cueva Ana Te Pora", "type": "cueva", "lat": -27.0940, "lng": -109.4230, "description": "Caverna amplia con plataforma de piedra ceremonial."},
-            {"name": "Caleta Hanga Oteo", "type": "playa", "lat": -27.0740, "lng": -109.3850, "description": "Bahía virgen con colonias de aves y piscinas de marea."},
-            {"name": "Playa Anakena", "type": "playa", "lat": -27.0730, "lng": -109.3230, "description": "Final de la travesía: baño en aguas turquesa junto a los moai."},
+            {"name": "Cueva Ana Kakenga", "type": "cueva", "lat": -27.1030, "lng": -109.4310, "description": "Túnel de lava con dos 'ventanas' colgadas sobre el mar.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/Ana_Kakenga_3.jpg/1280px-Ana_Kakenga_3.jpg"},
+            {"name": "Ahu Te Peu", "type": "arqueologico", "lat": -27.0980, "lng": -109.4270, "description": "Cimientos de hare paenga (casa-bote) del último ariki.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/Ana_Kakenga_3.jpg/1280px-Ana_Kakenga_3.jpg"},
+            {"name": "Cueva Ana Te Pora", "type": "cueva", "lat": -27.0940, "lng": -109.4230, "description": "Caverna amplia con plataforma de piedra ceremonial.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/Ana_Kakenga_3.jpg/1280px-Ana_Kakenga_3.jpg"},
+            {"name": "Caleta Hanga Oteo", "type": "playa", "lat": -27.0740, "lng": -109.3850, "description": "Bahía virgen con colonias de aves y piscinas de marea.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/00/Easter_Island_2.jpg/1280px-Easter_Island_2.jpg"},
+            {"name": "Playa Anakena", "type": "playa", "lat": -27.0730, "lng": -109.3230, "description": "Final de la travesía: baño en aguas turquesa junto a los moai.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Anakena-Ahu-Ature.jpg/1280px-Anakena-Ahu-Ature.jpg"},
         ],
         "vai": {
             "recommended_liters": "4 litros por persona",
@@ -399,9 +399,9 @@ ROUTES = [
             [-27.1670, -109.4160], [-27.1685, -109.4100],
         ],
         "pois": [
-            {"name": "Ahu Tahira (Vinapu I)", "type": "arqueologico", "lat": -27.1685, "lng": -109.4100, "description": "Muro de basalto de precisión 'incaica', enigma arqueológico."},
-            {"name": "Moai femenino de Vinapu", "type": "moai", "lat": -27.1683, "lng": -109.4105, "description": "Raro moai de escoria roja con dos cabezas, posiblemente femenino."},
-            {"name": "Bufaderos costa sur", "type": "mirador", "lat": -27.1650, "lng": -109.4230, "description": "Chorros de mar que explotan entre grietas de lava."},
+            {"name": "Ahu Tahira (Vinapu I)", "type": "arqueologico", "lat": -27.1685, "lng": -109.4100, "description": "Muro de basalto de precisión 'incaica', enigma arqueológico.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/Ahu_Vinapu_4.jpg/1280px-Ahu_Vinapu_4.jpg"},
+            {"name": "Moai femenino de Vinapu", "type": "moai", "lat": -27.1683, "lng": -109.4105, "description": "Raro moai de escoria roja con dos cabezas, posiblemente femenino.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/Ahu_Vinapu_4.jpg/1280px-Ahu_Vinapu_4.jpg"},
+            {"name": "Bufaderos costa sur", "type": "mirador", "lat": -27.1650, "lng": -109.4230, "description": "Chorros de mar que explotan entre grietas de lava.", "photo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/Ahu_Vinapu_4.jpg/1280px-Ahu_Vinapu_4.jpg"},
         ],
         "vai": {
             "recommended_liters": "1,5 litros por persona",
