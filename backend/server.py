@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -486,6 +486,16 @@ async def delete_water_point(point_id: str, request: Request):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Punto no encontrado")
     return {"deleted": True}
+
+
+@api_router.get("/qr")
+async def get_qr():
+    """Código QR oficial que apunta a la URL de producción de la app."""
+    return FileResponse(
+        ROOT_DIR / "static" / "qr-descubre-rapa-nui.png",
+        media_type="image/png",
+        filename="qr-descubre-rapa-nui.png",
+    )
 
 
 # Include the router in the main app
