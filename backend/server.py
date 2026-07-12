@@ -498,6 +498,16 @@ async def get_qr():
     )
 
 
+@api_router.get("/qr-definitivo")
+async def get_qr_definitivo():
+    """QR permanente: apunta a la página oficial de la app en Emergent."""
+    return FileResponse(
+        ROOT_DIR / "static" / "qr-definitivo.png",
+        media_type="image/png",
+        filename="qr-descubre-rapa-nui-definitivo.png",
+    )
+
+
 # Include the router in the main app
 app.include_router(api_router)
 
