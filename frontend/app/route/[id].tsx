@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Feather, FontAwesome } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
@@ -23,6 +23,7 @@ import {
 import VaiBanner from "@/src/components/VaiBanner";
 import { colors, difficultyColor, poiColor, poiIcon, radius, serif, spacing } from "@/src/lib/theme";
 import { distanceKm } from "@/src/lib/geo";
+import { shareGuideWhatsApp } from "@/src/lib/share";
 
 // Formato de coordenada georreferenciada: -27.1258, -109.2768 → "27.1258° S · 109.2768° O"
 const geoRef = (lat: number, lng: number) =>
@@ -96,6 +97,17 @@ export default function RouteDetail() {
             testID="back-button"
           >
             <Feather name="arrow-left" size={20} color={colors.onSurface} />
+          </Pressable>
+          <Pressable
+            style={[styles.shareHeroBtn, { top: insets.top + spacing.sm }]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              shareGuideWhatsApp();
+            }}
+            hitSlop={12}
+            testID="share-button"
+          >
+            <FontAwesome name="whatsapp" size={20} color="#fff" />
           </Pressable>
           <View style={styles.heroContent}>
             <View style={[styles.typeTag, { backgroundColor: route.color }]}>
@@ -276,6 +288,17 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   heroContent: { padding: spacing.xl, gap: spacing.sm },
+  shareHeroBtn: {
+    position: "absolute",
+    right: spacing.lg,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#25D366",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+  },
   typeTag: {
     alignSelf: "flex-start",
     borderRadius: radius.sm,

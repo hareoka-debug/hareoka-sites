@@ -1,5 +1,5 @@
 import BottomSheet, { BottomSheetFlatList } from "@gorhom/bottom-sheet";
-import { Feather } from "@expo/vector-icons";
+import { Feather, FontAwesome } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
@@ -32,6 +32,7 @@ import {
 } from "@/src/lib/api";
 import { colors, difficultyColor, radius, serif, spacing } from "@/src/lib/theme";
 import { distanceKm, formatDistance } from "@/src/lib/geo";
+import { shareGuideWhatsApp } from "@/src/lib/share";
 
 const ON_ISLAND = (lat: number, lng: number) =>
   lat <= -27.02 && lat >= -27.22 && lng >= -109.49 && lng <= -109.2;
@@ -271,6 +272,16 @@ export default function MapScreen() {
           <Text style={styles.headerTitle}>Rutas Rapa Nui</Text>
           <Text style={styles.headerSub}>{routes.length} rutas · Isla de Pascua</Text>
         </Pressable>
+        <Pressable
+          style={styles.shareBtn}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            shareGuideWhatsApp();
+          }}
+          testID="share-button"
+        >
+          <FontAwesome name="whatsapp" size={22} color="#fff" />
+        </Pressable>
       </View>
 
       <Pressable
@@ -376,7 +387,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   retryText: { color: colors.onBrand, fontWeight: "600" },
-  header: { position: "absolute", left: spacing.lg, right: spacing.lg },
+  header: {
+    position: "absolute",
+    left: spacing.lg,
+    right: spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  shareBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#25D366",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#1DA851",
+  },
   headerChip: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
