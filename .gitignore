@@ -27,8 +27,9 @@ next-env.d.ts
 
 # Production builds
 /build
-dist/
-dist
+# dist/ se incluye para el deploy del frontend web estático
+# dist/
+# dist
 
 # Environment files (comprehensive coverage)
 

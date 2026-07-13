@@ -1,5 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -518,6 +519,44 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------------- Servir frontend Expo Web como estático ----------------
+# Cuando existe el build web (`/app/frontend/dist`), lo servimos en `/`.
+# Esto permite que el mismo backend sirva la web app (paywall, mapa, etc.)
+# además del API, sin depender del proxy del deploy.
+_FRONTEND_DIST = Path("/app/frontend/dist")
+if _FRONTEND_DIST.exists() and (_FRONTEND_DIST / "index.html").exists():
+    # Servir assets estáticos (JS, imágenes, fuentes, favicon)
+    app.mount(
+        "/_expo",
+        StaticFiles(directory=str(_FRONTEND_DIST / "_expo")),
+        name="expo-assets",
+    )
+    _ASSETS_DIR = _FRONTEND_DIST / "assets"
+    if _ASSETS_DIR.exists():
+        app.mount(
+            "/assets",
+            StaticFiles(directory=str(_ASSETS_DIR)),
+            name="app-assets",
+        )
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon():
+        return FileResponse(_FRONTEND_DIST / "favicon.ico")
+
+    # Fallback SPA: cualquier ruta que no sea /api/* devuelve index.html
+    # para que expo-router maneje la navegación en el cliente.
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        # No interceptar rutas del API
+        if full_path.startswith("api") or full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        # Servir archivos concretos que existan en dist/
+        target = _FRONTEND_DIST / full_path
+        if full_path and target.is_file():
+            return FileResponse(target)
+        # Fallback a index.html (SPA)
+        return FileResponse(_FRONTEND_DIST / "index.html")
 
 # Configure logging
 logging.basicConfig(

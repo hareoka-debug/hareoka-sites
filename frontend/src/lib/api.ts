@@ -1,6 +1,14 @@
+import { Platform } from "react-native";
+
 import { storage } from "@/src/utils/storage";
 
-const BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
+// En web usamos siempre el mismo origen que sirve la app (así funciona en
+// preview y en el deploy definitivo sin depender de env). En nativo cae al
+// EXPO_PUBLIC_BACKEND_URL configurado en frontend/.env.
+const BASE: string =
+  Platform.OS === "web" && typeof window !== "undefined"
+    ? window.location.origin
+    : (process.env.EXPO_PUBLIC_BACKEND_URL as string);
 
 export interface Poi {
   name: string;

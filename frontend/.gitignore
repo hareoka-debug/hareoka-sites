@@ -6,7 +6,8 @@ node_modules/
 # Expo
 .expo/
 .metro-cache/
-dist/
+# dist/ se incluye en el repo para que el deploy sirva el web build estático
+# dist/
 web-build/
 expo-env.d.ts
 

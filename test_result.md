@@ -101,3 +101,80 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  El usuario tiene una app Expo (React Native) "Descubre Rapa Nui" — guía de senderos de Isla de Pascua
+  con paywall ($3.000 CLP), Stripe/Mercado Pago/Flow, mapa interactivo y botón de compartir por WhatsApp.
+  Solicitó tener un LINK DEFINITIVO de producción (no preview) para que los clientes usen la app en
+  cualquier navegador sin instalar Expo Go, sin App Store/Play Store, y sin publicidad de Emergent.
+  Además quiere que el botón de WhatsApp comparta ese link definitivo.
+
+  Deploy hecho: https://app-builder-9807.emergent.host
+  Problema detectado: en producción, `/` devolvía 404 del FastAPI (el frontend Expo Web no se servía).
+  `/api/` sí funcionaba.
+
+  Solución aplicada en esta sesión:
+  - Se añadió `StaticFiles` + fallback SPA en `backend/server.py` para servir `/app/frontend/dist` en `/`.
+  - Se hizo build web con `npx expo export --platform web --output-dir dist`.
+  - Se añadió `EXPO_PUBLIC_APP_URL=https://app-builder-9807.emergent.host` en `frontend/.env`.
+  - Se actualizó `frontend/src/lib/share.ts` para priorizar `EXPO_PUBLIC_APP_URL` en el share de WhatsApp.
+  - Se actualizó `frontend/src/lib/api.ts` para usar `window.location.origin` como BASE en web
+    (así el frontend en producción llama al backend de producción, no al de preview).
+  - Se removió `dist/` del `.gitignore` (raíz y frontend) para que el build se incluya en el deploy.
+
+backend:
+  - task: "Servir Expo Web dist/ como estático en `/` con fallback SPA"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Verificado con curl local: `/` → 200 HTML, `/api/` → 200 JSON, `/api/no-existe` → 404, `/map` → 200 SPA fallback, `/_expo/static/js/web/*.js` → 200 bundle 2.86MB, `/favicon.ico` → 200."
+
+frontend:
+  - task: "Botón WhatsApp comparte link definitivo (EXPO_PUBLIC_APP_URL)"
+    implemented: true
+    working: true
+    file: "frontend/src/lib/share.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Bundle contiene `https://app-builder-9807.emergent.host` (verificado con grep). Fallbacks: window.location.origin en web, EXPO_PUBLIC_BACKEND_URL en nativo."
+  - task: "API BASE URL usa origin en web"
+    implemented: true
+    working: true
+    file: "frontend/src/lib/api.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "En web usa window.location.origin, en nativo usa EXPO_PUBLIC_BACKEND_URL. Ya funciona en localhost:8001 servido por FastAPI."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 0
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Redeploy en Emergent para que la URL de producción tome los cambios"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Cambios listos localmente y verificados con curl/screenshot. El usuario debe volver a hacer
+      Deploy en Emergent para que la URL https://app-builder-9807.emergent.host tome los cambios
+      (FastAPI sirviendo el frontend web + WhatsApp compartiendo el link definitivo).
