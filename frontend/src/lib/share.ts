@@ -1,10 +1,15 @@
 import { Linking, Platform, Share } from "react-native";
 
+// URL definitiva de producción de la app.
+// Se compila en el bundle a partir de EXPO_PUBLIC_APP_URL (frontend/.env).
+// Prioridad: EXPO_PUBLIC_APP_URL > window.location.origin (web) > EXPO_PUBLIC_BACKEND_URL.
 function getAppUrl(): string {
+  const publicUrl = (process.env.EXPO_PUBLIC_APP_URL || "").trim();
+  if (publicUrl) return publicUrl.replace(/\/$/, "");
   if (Platform.OS === "web" && typeof window !== "undefined") {
     return window.location.origin;
   }
-  return process.env.EXPO_PUBLIC_BACKEND_URL || "";
+  return (process.env.EXPO_PUBLIC_BACKEND_URL || "").replace(/\/$/, "");
 }
 
 const MESSAGE = (url: string) =>
