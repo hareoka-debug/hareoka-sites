@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -18,27 +19,44 @@ import { storage } from "@/src/utils/storage";
 import WaterPointsEditor from "@/src/components/WaterPointsEditor";
 import { colors, radius, serif, spacing } from "@/src/lib/theme";
 
-const BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
+// En web usamos el mismo origen que sirve la app para que en preview y en
+// producción el admin apunte automáticamente al backend correcto.
+const BASE: string =
+  Platform.OS === "web" && typeof window !== "undefined"
+    ? window.location.origin
+    : (process.env.EXPO_PUBLIC_BACKEND_URL as string);
 const ADMIN_KEY_STORAGE = "rapa-nui-admin-key";
+
+interface SaleRecent {
+  id?: string;
+  email?: string;
+  provider: string;
+  amount_clp: number;
+  paid_at: string | null;
+  device_id: string;
+}
 
 interface Sales {
   total_clp: number;
   sales_count: number;
   pending_count: number;
+  granted_count?: number;
   by_provider: Record<string, { count: number; total_clp: number }>;
-  recent: { provider: string; amount_clp: number; paid_at: string | null; device_id: string }[];
+  recent: SaleRecent[];
 }
 
 const PROVIDER_LABEL: Record<string, string> = {
   mercadopago: "Mercado Pago",
   flow: "Flow",
   stripe: "Tarjeta int. (Stripe)",
+  manual: "Acceso manual",
 };
 
 const PROVIDER_ICON: Record<string, any> = {
   mercadopago: "smartphone",
   flow: "credit-card",
   stripe: "globe",
+  manual: "user-check",
 };
 
 const clp = (n: number) => `$${n.toLocaleString("es-CL")} CLP`;
@@ -53,7 +71,13 @@ export default function AdminPanel() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sales, setSales] = useState<Sales | null>(null);
-  const [tab, setTab] = useState<"ventas" | "vai">("ventas");
+  const [tab, setTab] = useState<"ventas" | "acceso" | "vai">("ventas");
+
+  // Acceso manual (para clientes que pagaron pero el registro se perdió)
+  const [grantEmail, setGrantEmail] = useState("");
+  const [grantNote, setGrantNote] = useState("");
+  const [granting, setGranting] = useState(false);
+  const [grantMsg, setGrantMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const fetchSales = useCallback(async (adminKey: string): Promise<boolean> => {
     const res = await fetch(`${BASE}/api/admin/sales`, {
@@ -119,6 +143,40 @@ export default function AdminPanel() {
     setSales(null);
   };
 
+  const handleGrant = async () => {
+    setGrantMsg(null);
+    const email = grantEmail.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      setGrantMsg({ ok: false, text: "Ingresa un email válido (ej: cliente@correo.com)" });
+      return;
+    }
+    setGranting(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const res = await fetch(`${BASE}/api/admin/grant`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Admin-Key": key },
+        body: JSON.stringify({ email, note: grantNote.trim() || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setGrantMsg({ ok: false, text: data?.detail || "No se pudo conceder acceso." });
+      } else if (data.already_had_access) {
+        setGrantMsg({ ok: true, text: `${email} ya tenía acceso activo ✅` });
+      } else {
+        setGrantMsg({ ok: true, text: `Acceso concedido a ${email} ✅` });
+        setGrantEmail("");
+        setGrantNote("");
+        // refrescar contadores
+        try { await fetchSales(key); } catch { /* ignore */ }
+      }
+    } catch {
+      setGrantMsg({ ok: false, text: "Error de conexión. Intenta de nuevo." });
+    } finally {
+      setGranting(false);
+    }
+  };
+
   if (checkingStored) {
     return (
       <View style={styles.center}>
@@ -182,6 +240,14 @@ export default function AdminPanel() {
           <Text style={[styles.tabText, tab === "ventas" && styles.tabTextActive]}>Ventas</Text>
         </Pressable>
         <Pressable
+          style={[styles.tab, tab === "acceso" && styles.tabActive]}
+          onPress={() => setTab("acceso")}
+          testID="tab-acceso"
+        >
+          <Feather name="user-check" size={14} color={tab === "acceso" ? colors.onBrand : colors.onSurfaceSecondary} />
+          <Text style={[styles.tabText, tab === "acceso" && styles.tabTextActive]}>Acceso</Text>
+        </Pressable>
+        <Pressable
           style={[styles.tab, tab === "vai" && styles.tabActive]}
           onPress={() => setTab("vai")}
           testID="tab-vai"
@@ -193,6 +259,73 @@ export default function AdminPanel() {
 
       {tab === "vai" ? (
         <WaterPointsEditor adminKey={key} bottomInset={insets.bottom} />
+      ) : tab === "acceso" ? (
+      <ScrollView
+        contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl, gap: spacing.md }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.grantCard}>
+          <View style={styles.grantIcon}>
+            <Feather name="user-check" size={22} color={colors.onBrand} />
+          </View>
+          <Text style={styles.grantTitle}>Conceder acceso manual</Text>
+          <Text style={styles.grantSub}>
+            Si un cliente pagó pero perdió el acceso (cambio de teléfono, error de webhook,
+            reset del sistema), ingresa su email aquí. Podrá entrar usando "Restaurar acceso" en la app.
+          </Text>
+
+          <TextInput
+            style={styles.grantInput}
+            placeholder="Email del cliente (ej: cliente@correo.com)"
+            placeholderTextColor={colors.onSurfaceTertiary}
+            value={grantEmail}
+            onChangeText={setGrantEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            testID="grant-email"
+          />
+          <TextInput
+            style={[styles.grantInput, styles.grantNoteInput]}
+            placeholder="Nota (opcional): comprobante, fecha, proveedor…"
+            placeholderTextColor={colors.onSurfaceTertiary}
+            value={grantNote}
+            onChangeText={setGrantNote}
+            multiline
+            testID="grant-note"
+          />
+
+          {grantMsg ? (
+            <Text style={[styles.grantMsg, grantMsg.ok ? styles.grantMsgOk : styles.grantMsgErr]}>
+              {grantMsg.text}
+            </Text>
+          ) : null}
+
+          <Pressable
+            style={[styles.grantBtn, granting && { opacity: 0.6 }]}
+            onPress={handleGrant}
+            disabled={granting}
+            testID="grant-submit"
+          >
+            {granting ? (
+              <ActivityIndicator color={colors.onBrand} />
+            ) : (
+              <Text style={styles.grantBtnText}>Conceder acceso</Text>
+            )}
+          </Pressable>
+
+          <Text style={styles.grantHint}>
+            Total accesos concedidos manualmente: {sales?.granted_count ?? 0}
+          </Text>
+        </View>
+
+        <View style={styles.tipCard}>
+          <Feather name="info" size={14} color={colors.info} />
+          <Text style={styles.tipText}>
+            El cliente debe abrir la app, presionar "¿Ya pagaste? Restaurar acceso con tu email"
+            e ingresar el mismo correo que registraste aquí.
+          </Text>
+        </View>
+      </ScrollView>
       ) : (
       <ScrollView
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}
@@ -241,8 +374,9 @@ export default function AdminPanel() {
               />
               <View style={{ flex: 1 }}>
                 <Text style={styles.saleAmount}>{clp(r.amount_clp)}</Text>
-                <Text style={styles.saleMeta}>
-                  {PROVIDER_LABEL[r.provider] || r.provider} · disp. {r.device_id}…
+                <Text style={styles.saleMeta} numberOfLines={1}>
+                  {PROVIDER_LABEL[r.provider] || r.provider}
+                  {r.email ? ` · ${r.email}` : r.device_id ? ` · disp. ${r.device_id}…` : ""}
                 </Text>
               </View>
               <Text style={styles.saleDate}>
@@ -383,4 +517,57 @@ const styles = StyleSheet.create({
   saleAmount: { fontSize: 14, fontWeight: "600", color: colors.onSurface },
   saleMeta: { fontSize: 11, color: colors.onSurfaceTertiary },
   saleDate: { fontSize: 12, color: colors.onSurfaceTertiary },
+  // -- Acceso manual --
+  grantCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+  grantIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.brand,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "flex-start",
+  },
+  grantTitle: { fontFamily: serif, fontSize: 20, color: colors.onSurface },
+  grantSub: { fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 19 },
+  grantInput: {
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    fontSize: 14,
+    color: colors.onSurface,
+    backgroundColor: colors.surfaceSecondary,
+  },
+  grantNoteInput: { minHeight: 72, paddingTop: spacing.sm, textAlignVertical: "top" },
+  grantMsg: { fontSize: 13, fontWeight: "500" },
+  grantMsgOk: { color: colors.success },
+  grantMsgErr: { color: colors.error },
+  grantBtn: {
+    backgroundColor: colors.brand,
+    borderRadius: radius.pill,
+    minHeight: 50,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: spacing.xs,
+  },
+  grantBtnText: { color: colors.onBrand, fontSize: 15, fontWeight: "700" },
+  grantHint: { fontSize: 12, color: colors.onSurfaceTertiary, textAlign: "center" },
+  tipCard: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    alignItems: "flex-start",
+  },
+  tipText: { flex: 1, fontSize: 12, color: colors.onSurfaceSecondary, lineHeight: 17 },
 });

@@ -423,7 +423,7 @@ async def admin_sales(request: Request):
 
     paid = await db.payment_transactions.find(
         {"payment_status": "paid"},
-        {"provider": 1, "amount_clp": 1, "paid_at": 1, "device_id": 1},
+        {"provider": 1, "amount_clp": 1, "paid_at": 1, "device_id": 1, "email": 1, "id": 1},
     ).sort("paid_at", -1).to_list(500)
 
     by_provider: dict = {}
@@ -436,14 +436,18 @@ async def admin_sales(request: Request):
         by_provider[prov]["total_clp"] += p.get("amount_clp", 0)
 
     pending_count = await db.payment_transactions.count_documents({"payment_status": "pending"})
+    granted_count = await db.access_grants.count_documents({})
 
     return {
         "total_clp": total,
         "sales_count": len(paid),
         "pending_count": pending_count,
+        "granted_count": granted_count,
         "by_provider": by_provider,
         "recent": [
             {
+                "id": p.get("id"),
+                "email": p.get("email"),
                 "provider": p.get("provider", "stripe"),
                 "amount_clp": p.get("amount_clp", 0),
                 "paid_at": p.get("paid_at"),
@@ -452,6 +456,121 @@ async def admin_sales(request: Request):
             for p in paid[:30]
         ],
     }
+
+
+# --- Panel de recuperación / concesión manual de acceso ---
+# Casos de uso:
+#  - Un cliente pagó por Mercado Pago / Flow pero el webhook no confirmó a tiempo.
+#  - Cambio de dispositivo, cliente perdió acceso.
+#  - Emergencia por pérdida de BD entre deploys (recuperar acceso a compradores).
+
+@api_router.get("/admin/transactions")
+async def admin_transactions(request: Request, email: str | None = None, status: str | None = None, limit: int = 100):
+    """Lista transacciones con TODOS los estados (pending/paid/rejected/expired).
+    Filtros opcionales: ?email=xxx@yyy.com  ?status=paid  ?limit=50"""
+    _check_admin(request)
+    query: dict = {}
+    if email:
+        query["email"] = email.strip().lower()
+    if status:
+        query["payment_status"] = status
+    docs = await db.payment_transactions.find(
+        query,
+        {"_id": 0, "id": 1, "email": 1, "provider": 1, "payment_status": 1,
+         "amount_clp": 1, "created_at": 1, "paid_at": 1, "device_id": 1, "session_id": 1},
+    ).sort("created_at", -1).to_list(max(1, min(limit, 500)))
+    return {"count": len(docs), "items": docs}
+
+
+class GrantRequest(BaseModel):
+    email: str
+    note: str | None = None  # ej: "Pagó con Flow, comprobante #12345"
+
+
+@api_router.post("/admin/grant")
+async def admin_grant(body: GrantRequest, request: Request):
+    """Concede acceso manualmente a un email que ya pagó (útil si la BD perdió
+    el registro o el webhook nunca confirmó). El cliente luego usa
+    "Restaurar acceso con tu email" en la app y entra."""
+    _check_admin(request)
+    email = body.email.strip().lower()
+    if not re.match(r"^\S+@\S+\.\S+$", email):
+        raise HTTPException(status_code=400, detail="Email inválido")
+
+    # ¿Ya tiene una transacción paid? No dupliquemos.
+    existing = await db.payment_transactions.find_one({"email": email, "payment_status": "paid"})
+    if existing:
+        return {"granted": True, "already_had_access": True, "tx_id": existing["id"]}
+
+    now = datetime.now(timezone.utc).isoformat()
+    tx_id = str(uuid.uuid4())
+    await db.payment_transactions.insert_one({
+        "id": tx_id,
+        "provider": "manual",
+        "device_id": "",
+        "email": email,
+        "origin_url": "",
+        "amount_clp": PRICE_CLP_DISPLAY,
+        "currency": "clp",
+        "payment_status": "paid",
+        "created_at": now,
+        "paid_at": now,
+        "manual_note": body.note or "",
+    })
+    return {"granted": True, "already_had_access": False, "tx_id": tx_id, "email": email}
+
+
+class BulkGrantRequest(BaseModel):
+    emails: list[str]
+    note: str | None = None
+
+
+@api_router.post("/admin/grant-bulk")
+async def admin_grant_bulk(body: BulkGrantRequest, request: Request):
+    """Concede acceso a múltiples emails a la vez (útil para restaurar
+    compradores luego de una pérdida de BD)."""
+    _check_admin(request)
+    results = []
+    for raw in body.emails:
+        email = raw.strip().lower()
+        if not re.match(r"^\S+@\S+\.\S+$", email):
+            results.append({"email": raw, "granted": False, "error": "email_invalid"})
+            continue
+        existing = await db.payment_transactions.find_one({"email": email, "payment_status": "paid"})
+        if existing:
+            results.append({"email": email, "granted": True, "already": True})
+            continue
+        now = datetime.now(timezone.utc).isoformat()
+        tx_id = str(uuid.uuid4())
+        await db.payment_transactions.insert_one({
+            "id": tx_id,
+            "provider": "manual",
+            "device_id": "",
+            "email": email,
+            "origin_url": "",
+            "amount_clp": PRICE_CLP_DISPLAY,
+            "currency": "clp",
+            "payment_status": "paid",
+            "created_at": now,
+            "paid_at": now,
+            "manual_note": body.note or "",
+        })
+        results.append({"email": email, "granted": True, "already": False})
+    return {"count": len(results), "results": results}
+
+
+class RevokeRequest(BaseModel):
+    email: str
+
+
+@api_router.post("/admin/revoke")
+async def admin_revoke(body: RevokeRequest, request: Request):
+    """Revoca acceso manual creado por /admin/grant. NO afecta pagos reales."""
+    _check_admin(request)
+    email = body.email.strip().lower()
+    r1 = await db.payment_transactions.delete_many({"email": email, "provider": "manual"})
+    r2 = await db.access_grants.delete_many({"email": email})
+    return {"revoked_transactions": r1.deleted_count, "revoked_grants": r2.deleted_count}
 
 
 # --- Editor de Puntos Vai (dónde comprar agua VAINATIVA) ---

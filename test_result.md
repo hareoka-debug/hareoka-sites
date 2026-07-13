@@ -140,6 +140,23 @@ backend:
         - working: true
           agent: "testing"
           comment: "✅ RE-VERIFICATION COMPLETE - All 14 tests PASSED after frontend move to /app/backend/web_static/. Verified: (1) GET / → 200 with <title>Descubre Rapa Nui</title>, (2) GET /api/ → 200 with correct JSON, (3) GET /api/routes → 200 with 11 routes, (4) GET /api/water-points → 200 with 7 points, (5) GET /api/payments/providers → 200 with price_clp=3000, (6) GET /map → 200 SPA fallback, (7) GET /route/circuito-hanga-roa → 200 SPA fallback, (8) GET /api/no-existe → 404, (9) GET /favicon.ico → 200 (14510 bytes), (10) GET /_expo/static/js/web/entry-e0b3f82adda5f6e3d80b2d8f980066ad.js → 200 (2796.65 KB), (11) /app/backend/web_static/index.html exists (1223 bytes), (12) Bundle contains 'app-builder-9807.emergent.host' and 'api.whatsapp.com/send?text=', (13) Startup log message not visible (minor logging config issue but functionality confirmed working), (14) POST /api/payments/checkout → 502 (expected for unconfigured Mercado Pago). Backend serving from /app/backend/web_static/ confirmed working perfectly."
+        - working: true
+
+  - task: "Admin endpoints para recuperar acceso de clientes (grant/revoke/transactions)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ ALL 18 ADMIN ENDPOINT TESTS PASSED. Verified: GET /api/admin/sales (with/without key, with header), GET /api/admin/transactions (basic, email filter, status filter, wrong key), POST /api/admin/grant (new email, existing email, invalid email, no key), POST /api/admin/grant-bulk (mixed valid/invalid emails), POST /api/admin/revoke, POST /api/payments/restore (before/after grant/revoke). All authentication checks working (401 for missing/wrong key). Manual grant flow working: admin grants access → user calls restore → has_access=true. Revoke flow working: admin revokes → user calls restore → has_access=false. Bulk grant correctly handles invalid emails with error='email_invalid'. Sales endpoint correctly shows manual provider in by_provider after grants. All endpoints production-ready for recovering access after DB loss."
+
+          agent: "testing"
+          comment: "✅ ADMIN ENDPOINTS TESTING COMPLETE - All 18 admin endpoint tests PASSED against localhost:8001. Tested recovery access functionality for clients who paid but lost registration. ADMIN_KEY='RAPANUI-2026' verified working. Tests: (1) GET /api/admin/sales without key → 401 ✓, (2) GET /api/admin/sales?key=RAPANUI-2026 → 200 with correct structure ✓, (3) GET /api/admin/sales with X-Admin-Key header → 200 ✓, (4) GET /api/admin/transactions → 200 with count/items ✓, (5) GET /api/admin/transactions?email=nadie@test.com → 200 count=0 ✓, (6) GET /api/admin/transactions with wrong key → 401 ✓, (7) POST /api/admin/grant without key → 401 ✓, (8) POST /api/admin/grant new email → 200 with granted=true, already_had_access=false ✓, (9) POST /api/admin/grant existing email → 200 with already_had_access=true ✓, (10) POST /api/admin/grant invalid email → 400 'Email inválido' ✓, (11) POST /api/payments/restore with granted email → 200 has_access=true ✓, (12) POST /api/admin/grant-bulk with mixed emails → 200 with 3 granted, 1 error (email_invalid) ✓, (13) GET /api/admin/sales after grants → 200 with sales_count=4, granted_count=1, provider='manual' exists ✓, (14) GET /api/admin/transactions?email=cliente1@test.com → 200 count=1 payment_status=paid ✓, (15) GET /api/admin/transactions?status=paid → 200 count=4 ✓, (16) POST /api/admin/revoke → 200 with revoked_transactions=1, revoked_grants=1 ✓, (17) POST /api/payments/restore after revoke → 200 has_access=false ✓, (18) Cleanup revoke test emails → 200 ✓. NOTE: granted_count counts access_grants entries (created when users call /api/payments/restore), not manual grants. This is semantically correct but may differ from user expectation. All admin endpoints working correctly for recovery scenario."
+
 
 frontend:
   - task: "Botón WhatsApp comparte link definitivo (EXPO_PUBLIC_APP_URL)"
@@ -168,12 +185,12 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 1
+  test_sequence: 2
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Redeploy en Emergent para que la URL de producción tome los cambios"
+    - "Admin endpoints testing complete - all 18 tests passed"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -245,6 +262,64 @@ agent_communication:
       
       MINOR ISSUE (NON-BLOCKING):
       ⚠️  Test 13: Startup log message "Serving Expo Web from /app/backend/web_static" not visible in logs
+  - agent: "testing"
+    message: |
+      ✅ ADMIN ENDPOINTS COMPREHENSIVE TESTING COMPLETED - All 18 tests PASSED.
+      
+      Tested against http://localhost:8001 (backend direct port) with ADMIN_KEY="RAPANUI-2026":
+      
+      AUTHENTICATION TESTS:
+      ✅ Test 1: GET /api/admin/sales without key → 401 (correct)
+      ✅ Test 2: GET /api/admin/sales?key=RAPANUI-2026 → 200 with structure {total_clp, sales_count, pending_count, granted_count, by_provider, recent}
+      ✅ Test 3: GET /api/admin/sales with X-Admin-Key header → 200 (correct)
+      ✅ Test 6: GET /api/admin/transactions with wrong key → 401 (correct)
+      ✅ Test 7: POST /api/admin/grant without key → 401 (correct)
+      
+      TRANSACTIONS ENDPOINT:
+      ✅ Test 4: GET /api/admin/transactions?key=RAPANUI-2026 → 200 with {count, items:[]}
+      ✅ Test 5: GET /api/admin/transactions?email=nadie@test.com → 200 count=0
+      ✅ Test 14: GET /api/admin/transactions?email=cliente1@test.com → 200 count=1 payment_status=paid
+      ✅ Test 15: GET /api/admin/transactions?status=paid → 200 count=4
+      
+      GRANT ENDPOINT (SINGLE):
+      ✅ Test 8: POST /api/admin/grant new email (cliente1@test.com) → 200 {granted:true, already_had_access:false, tx_id, email}
+      ✅ Test 9: POST /api/admin/grant existing email → 200 {granted:true, already_had_access:true}
+      ✅ Test 10: POST /api/admin/grant invalid email → 400 "Email inválido"
+      
+      GRANT BULK ENDPOINT:
+      ✅ Test 12: POST /api/admin/grant-bulk with ["c2@test.com","c3@test.com","invalido","c4@test.com"] → 200 {count:4, results:[3 granted, 1 error:email_invalid]}
+      
+      RESTORE ENDPOINT:
+      ✅ Test 11: POST /api/payments/restore with granted email → 200 {has_access:true}
+      ✅ Test 17: POST /api/payments/restore after revoke → 200 {has_access:false}
+      
+      REVOKE ENDPOINT:
+      ✅ Test 16: POST /api/admin/revoke cliente1@test.com → 200 {revoked_transactions:1, revoked_grants:1}
+      ✅ Test 18: Cleanup (revoke c2, c3, c4) → 200 for all
+      
+      SALES ENDPOINT AFTER GRANTS:
+      ✅ Test 13: GET /api/admin/sales after grants → 200 with sales_count=4, granted_count=1, provider="manual" in by_provider
+      
+      SEMANTIC NOTE:
+      The `granted_count` field in /api/admin/sales counts entries in the `access_grants` collection (created when users call /api/payments/restore), NOT the number of manual grants. This is semantically correct:
+      - Manual grants create paid transactions with provider="manual" (counted in sales_count)
+      - Users must call /api/payments/restore to link their device (creates access_grant entry)
+      - granted_count = number of devices that have restored access
+      
+      In the test scenario:
+      - 4 manual grants created (cliente1, c2, c3, c4) → sales_count=4
+      - Only cliente1 called restore → granted_count=1
+      - This is correct behavior
+      
+      CRITICAL RECOVERY FLOW VERIFIED:
+      1. Admin grants access via /api/admin/grant → creates paid transaction with provider="manual"
+      2. Client opens app and uses "Restaurar acceso con tu email"
+      3. App calls /api/payments/restore with email + device_id
+      4. Backend finds paid transaction and creates access_grant entry
+      5. Client has access on their device
+      
+      CONCLUSION: All admin endpoints working correctly. Recovery flow for clients who paid but lost registration is fully functional. Production-ready.
+
           (logging config timing issue - logger.info() called before logging.basicConfig())
           However, functionality is 100% confirmed working via file system and HTTP tests.
       
