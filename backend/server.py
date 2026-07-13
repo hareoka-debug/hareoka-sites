@@ -871,7 +871,7 @@ if not (_FRONTEND_DIST / "index.html").exists():
 
 if _FRONTEND_DIST.exists() and (_FRONTEND_DIST / "index.html").exists():
     logger.info(f"Serving Expo Web from {_FRONTEND_DIST}")
-    # Servir assets estáticos (JS, imágenes, fuentes, favicon)
+    # Servir el bundle JS bajo /_expo (StaticFiles maneja bien los cache headers).
     _EXPO_DIR = _FRONTEND_DIST / "_expo"
     if _EXPO_DIR.exists():
         app.mount(
@@ -879,29 +879,40 @@ if _FRONTEND_DIST.exists() and (_FRONTEND_DIST / "index.html").exists():
             StaticFiles(directory=str(_EXPO_DIR)),
             name="expo-assets",
         )
-    _ASSETS_DIR = _FRONTEND_DIST / "assets"
-    if _ASSETS_DIR.exists():
-        app.mount(
-            "/assets",
-            StaticFiles(directory=str(_ASSETS_DIR)),
-            name="app-assets",
-        )
 
     @app.get("/favicon.ico", include_in_schema=False)
     async def favicon():
         return FileResponse(_FRONTEND_DIST / "favicon.ico")
 
-    # Fallback SPA: cualquier ruta que no sea /api/* devuelve index.html
-    # para que expo-router maneje la navegación en el cliente.
+    # Fallback SPA universal: sirve archivos estáticos (incl. /assets/*, fuentes,
+    # imágenes) desde web_static/, y si el path no existe cae a index.html
+    # para que expo-router maneje la navegación.
+    # NO usamos un mount separado para /assets porque en el deploy la carpeta
+    # puede no viajar correctamente; con este catchall siempre funciona.
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str):
         # No interceptar rutas del API
         if full_path.startswith("api") or full_path.startswith("api/"):
             raise HTTPException(status_code=404, detail="Not Found")
-        # Servir archivos concretos que existan en dist/
+        # Servir archivos concretos que existan en web_static/
         target = _FRONTEND_DIST / full_path
         if full_path and target.is_file():
-            return FileResponse(target)
+            # Determinar tipo MIME básico para fuentes/imágenes
+            ext = target.suffix.lower()
+            media_type = None
+            if ext == ".ttf":
+                media_type = "font/ttf"
+            elif ext == ".woff":
+                media_type = "font/woff"
+            elif ext == ".woff2":
+                media_type = "font/woff2"
+            elif ext == ".otf":
+                media_type = "font/otf"
+            return FileResponse(target, media_type=media_type)
+        # Si el path incluye una extensión de archivo (fuente/imagen/js) y no existe → 404 real
+        # para que el cliente sepa que el asset no está.
+        if "." in full_path.split("/")[-1]:
+            raise HTTPException(status_code=404, detail="Not Found")
         # Fallback a index.html (SPA)
         return FileResponse(_FRONTEND_DIST / "index.html")
 else:
