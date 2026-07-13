@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import re
 import logging
+import secrets
 import httpx
 from pathlib import Path
 from pydantic import BaseModel
@@ -68,6 +69,11 @@ async def get_water_points():
 # Stripe: la librería multiplica amount * 100, por lo que 30.0 -> unit_amount 3000 CLP.
 PRICE_CLP_DISPLAY = 3000
 PRICE_AMOUNT_FOR_STRIPE_LIB = 30.0
+
+# ---------------- Control de acceso ----------------
+# Máximo de dispositivos que pueden compartir un mismo pago (email + código).
+# Ejemplo: 3 = comprador puede usar celular + tablet + notebook.
+MAX_DEVICES_PER_PAYMENT = int(os.environ.get("MAX_DEVICES_PER_PAYMENT", "3"))
 
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
 MP_ACCESS_TOKEN = os.environ.get("MP_ACCESS_TOKEN", "")
@@ -134,6 +140,9 @@ async def create_payment_checkout(body: CheckoutRequest, request: Request):
     origin = body.origin_url.rstrip("/")
     host_url = str(request.base_url).rstrip("/")
     tx_id = str(uuid.uuid4())
+    # Código de acceso único de 6 dígitos — el cliente lo verá post-pago y
+    # deberá usarlo para autorizar otros dispositivos (tablet, notebook).
+    access_code = f"{secrets.randbelow(1_000_000):06d}"
     doc = {
         "id": tx_id,
         "provider": body.provider,
@@ -143,6 +152,8 @@ async def create_payment_checkout(body: CheckoutRequest, request: Request):
         "amount_clp": PRICE_CLP_DISPLAY,
         "currency": "clp",
         "payment_status": "pending",
+        "access_code": access_code,
+        "max_devices": MAX_DEVICES_PER_PAYMENT,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -305,28 +316,141 @@ async def get_payment_status(tx_id: str, request: Request):
 
 @api_router.get("/payments/access/{device_id}")
 async def check_access(device_id: str):
-    doc = await db.payment_transactions.find_one(
+    """Verifica si un device_id tiene acceso: fue el dispositivo comprador
+    o tiene un access_grant válido asociado a una compra pagada."""
+    paid = await db.payment_transactions.find_one(
         {"device_id": device_id, "payment_status": "paid"}
     )
-    if not doc:
-        doc = await db.access_grants.find_one({"device_id": device_id})
-    return {"has_access": doc is not None}
+    if paid:
+        return {"has_access": True, "email": paid.get("email"), "is_purchaser": True}
+    grant = await db.access_grants.find_one({"device_id": device_id})
+    if grant:
+        # Verificamos que la transacción origen siga siendo válida (paid)
+        source = await db.payment_transactions.find_one({"id": grant.get("source_tx")})
+        if source and source.get("payment_status") == "paid":
+            return {"has_access": True, "email": grant.get("email"), "is_purchaser": False}
+    return {"has_access": False}
+
+
+@api_router.get("/payments/my-info/{device_id}")
+async def my_purchase_info(device_id: str):
+    """Info del pago para el dispositivo comprador: email, código de acceso,
+    dispositivos activos y cuántos slots quedan.
+    Solo devuelve el código si device_id es el que originalmente pagó."""
+    paid = await db.payment_transactions.find_one(
+        {"device_id": device_id, "payment_status": "paid"}
+    )
+    if not paid:
+        raise HTTPException(status_code=404, detail="Este dispositivo no ha comprado")
+
+    grants = await db.access_grants.find(
+        {"source_tx": paid["id"]},
+        {"_id": 0, "device_id": 1, "granted_at": 1}
+    ).sort("granted_at", -1).to_list(20)
+
+    max_devices = paid.get("max_devices", MAX_DEVICES_PER_PAYMENT)
+    # +1 porque el device comprador cuenta como uno
+    active_count = 1 + len(grants)
+    return {
+        "email": paid.get("email"),
+        "access_code": paid.get("access_code"),
+        "max_devices": max_devices,
+        "active_devices": active_count,
+        "slots_remaining": max(0, max_devices - active_count),
+        "purchaser_device": (paid.get("device_id") or "")[:10] + "…",
+        "extra_devices": [
+            {
+                "device_id_short": (g.get("device_id") or "")[:10] + "…",
+                "device_id": g.get("device_id"),
+                "granted_at": g.get("granted_at"),
+            }
+            for g in grants
+        ],
+    }
+
+
+class ReleaseDeviceRequest(BaseModel):
+    device_id: str  # el dispositivo comprador (autoriza la acción)
+    target_device_id: str  # el device_id a liberar
+
+
+@api_router.post("/payments/release-device")
+async def release_device(body: ReleaseDeviceRequest):
+    """El comprador libera uno de sus dispositivos extra (ej: perdió su tablet)."""
+    paid = await db.payment_transactions.find_one(
+        {"device_id": body.device_id, "payment_status": "paid"}
+    )
+    if not paid:
+        raise HTTPException(status_code=403, detail="Solo el comprador puede liberar dispositivos")
+    if body.target_device_id == body.device_id:
+        raise HTTPException(status_code=400, detail="No puedes liberar el dispositivo comprador")
+    result = await db.access_grants.delete_one({
+        "device_id": body.target_device_id,
+        "source_tx": paid["id"],
+    })
+    return {"released": result.deleted_count > 0}
 
 
 class RestoreRequest(BaseModel):
     email: str
     device_id: str
+    access_code: str | None = None  # requerido para restaurar en otros dispositivos
 
 
 @api_router.post("/payments/restore")
 async def restore_by_email(body: RestoreRequest):
-    """Verifica el acceso mediante el email usado en la compra y lo vincula a este dispositivo."""
+    """Vincula el dispositivo a una compra existente.
+    Requiere: email + código de acceso (6 dígitos que el cliente vio al pagar).
+    Enforza el máximo de dispositivos por compra."""
     email = body.email.strip().lower()
     if not re.match(r"^\S+@\S+\.\S+$", email):
         raise HTTPException(status_code=400, detail="Email inválido")
+
+    # ¿Este dispositivo ya es el comprador original? Entonces acceso directo.
+    purchaser = await db.payment_transactions.find_one(
+        {"device_id": body.device_id, "email": email, "payment_status": "paid"}
+    )
+    if purchaser:
+        return {"has_access": True, "reason": "purchaser"}
+
+    # ¿Este dispositivo ya tiene grant activo con este email? Entonces acceso directo.
+    existing_grant = await db.access_grants.find_one(
+        {"device_id": body.device_id, "email": email}
+    )
+    if existing_grant:
+        return {"has_access": True, "reason": "already_granted"}
+
+    # Buscar la compra por email
     paid = await db.payment_transactions.find_one({"email": email, "payment_status": "paid"})
     if not paid:
-        return {"has_access": False}
+        return {"has_access": False, "reason": "no_payment"}
+
+    # Grants manuales (sin código): el admin concedió acceso, permitir sin código
+    is_manual = paid.get("provider") == "manual"
+
+    # Verificar código de acceso (excepto grants manuales)
+    if not is_manual:
+        expected_code = str(paid.get("access_code") or "").strip()
+        given_code = (body.access_code or "").strip()
+        if not expected_code:
+            # Compra vieja sin código — dejamos entrar por email (compatibilidad)
+            pass
+        elif given_code != expected_code:
+            return {"has_access": False, "reason": "code_invalid"}
+
+    # Enforzar límite de dispositivos
+    max_devices = paid.get("max_devices", MAX_DEVICES_PER_PAYMENT)
+    current_grants = await db.access_grants.count_documents({"source_tx": paid["id"]})
+    active_devices = 1 + current_grants  # +1 por el comprador
+    if active_devices >= max_devices:
+        return {
+            "has_access": False,
+            "reason": "device_limit",
+            "max_devices": max_devices,
+            "active_devices": active_devices,
+        }
+
+    # Crear el grant
     await db.access_grants.update_one(
         {"device_id": body.device_id},
         {"$set": {
@@ -337,7 +461,11 @@ async def restore_by_email(body: RestoreRequest):
         }},
         upsert=True,
     )
-    return {"has_access": True}
+    return {
+        "has_access": True,
+        "reason": "granted",
+        "slots_remaining": max_devices - active_devices - 1,
+    }
 
 
 # --- Retorno de Flow (Flow redirige al pagador vía POST con el token) ---
@@ -500,10 +628,11 @@ async def admin_grant(body: GrantRequest, request: Request):
     # ¿Ya tiene una transacción paid? No dupliquemos.
     existing = await db.payment_transactions.find_one({"email": email, "payment_status": "paid"})
     if existing:
-        return {"granted": True, "already_had_access": True, "tx_id": existing["id"]}
+        return {"granted": True, "already_had_access": True, "tx_id": existing["id"], "access_code": existing.get("access_code")}
 
     now = datetime.now(timezone.utc).isoformat()
     tx_id = str(uuid.uuid4())
+    access_code = f"{secrets.randbelow(1_000_000):06d}"
     await db.payment_transactions.insert_one({
         "id": tx_id,
         "provider": "manual",
@@ -513,11 +642,13 @@ async def admin_grant(body: GrantRequest, request: Request):
         "amount_clp": PRICE_CLP_DISPLAY,
         "currency": "clp",
         "payment_status": "paid",
+        "access_code": access_code,
+        "max_devices": MAX_DEVICES_PER_PAYMENT,
         "created_at": now,
         "paid_at": now,
         "manual_note": body.note or "",
     })
-    return {"granted": True, "already_had_access": False, "tx_id": tx_id, "email": email}
+    return {"granted": True, "already_had_access": False, "tx_id": tx_id, "email": email, "access_code": access_code}
 
 
 class BulkGrantRequest(BaseModel):
@@ -538,10 +669,11 @@ async def admin_grant_bulk(body: BulkGrantRequest, request: Request):
             continue
         existing = await db.payment_transactions.find_one({"email": email, "payment_status": "paid"})
         if existing:
-            results.append({"email": email, "granted": True, "already": True})
+            results.append({"email": email, "granted": True, "already": True, "access_code": existing.get("access_code")})
             continue
         now = datetime.now(timezone.utc).isoformat()
         tx_id = str(uuid.uuid4())
+        access_code = f"{secrets.randbelow(1_000_000):06d}"
         await db.payment_transactions.insert_one({
             "id": tx_id,
             "provider": "manual",
@@ -551,11 +683,13 @@ async def admin_grant_bulk(body: BulkGrantRequest, request: Request):
             "amount_clp": PRICE_CLP_DISPLAY,
             "currency": "clp",
             "payment_status": "paid",
+            "access_code": access_code,
+            "max_devices": MAX_DEVICES_PER_PAYMENT,
             "created_at": now,
             "paid_at": now,
             "manual_note": body.note or "",
         })
-        results.append({"email": email, "granted": True, "already": False})
+        results.append({"email": email, "granted": True, "already": False, "access_code": access_code})
     return {"count": len(results), "results": results}
 
 
@@ -571,6 +705,87 @@ async def admin_revoke(body: RevokeRequest, request: Request):
     r1 = await db.payment_transactions.delete_many({"email": email, "provider": "manual"})
     r2 = await db.access_grants.delete_many({"email": email})
     return {"revoked_transactions": r1.deleted_count, "revoked_grants": r2.deleted_count}
+
+
+# --- Gestión de dispositivos activos por email/compra ---
+
+@api_router.get("/admin/devices")
+async def admin_devices(request: Request, email: str | None = None):
+    """Lista dispositivos activos por compra. Si se pasa ?email=X filtra."""
+    _check_admin(request)
+    tx_query: dict = {"payment_status": "paid"}
+    if email:
+        tx_query["email"] = email.strip().lower()
+
+    txs = await db.payment_transactions.find(
+        tx_query,
+        {"_id": 0, "id": 1, "email": 1, "device_id": 1, "provider": 1,
+         "access_code": 1, "max_devices": 1, "paid_at": 1, "created_at": 1}
+    ).sort("paid_at", -1).to_list(200)
+
+    items = []
+    for tx in txs:
+        grants = await db.access_grants.find(
+            {"source_tx": tx["id"]},
+            {"_id": 0, "device_id": 1, "granted_at": 1}
+        ).sort("granted_at", -1).to_list(20)
+        items.append({
+            "tx_id": tx.get("id"),
+            "email": tx.get("email"),
+            "provider": tx.get("provider"),
+            "access_code": tx.get("access_code"),
+            "max_devices": tx.get("max_devices", MAX_DEVICES_PER_PAYMENT),
+            "purchaser_device": tx.get("device_id") or None,
+            "extra_devices": grants,
+            "active_count": (1 if tx.get("device_id") else 0) + len(grants),
+            "paid_at": tx.get("paid_at") or tx.get("created_at"),
+        })
+    return {"count": len(items), "items": items}
+
+
+class AdminReleaseRequest(BaseModel):
+    tx_id: str
+    device_id: str
+
+
+@api_router.post("/admin/release-device")
+async def admin_release_device(body: AdminReleaseRequest, request: Request):
+    """Libera un dispositivo (extra o comprador) de una compra específica."""
+    _check_admin(request)
+    tx = await db.payment_transactions.find_one({"id": body.tx_id})
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transacción no encontrada")
+    # ¿Es el comprador principal?
+    if tx.get("device_id") == body.device_id:
+        await db.payment_transactions.update_one(
+            {"id": body.tx_id}, {"$set": {"device_id": ""}}
+        )
+        return {"released": True, "was_purchaser": True}
+    # Es un grant extra
+    result = await db.access_grants.delete_one({
+        "source_tx": body.tx_id,
+        "device_id": body.device_id,
+    })
+    return {"released": result.deleted_count > 0, "was_purchaser": False}
+
+
+class RegenCodeRequest(BaseModel):
+    email: str
+
+
+@api_router.post("/admin/regen-code")
+async def admin_regen_code(body: RegenCodeRequest, request: Request):
+    """Regenera el código de acceso de un email (si el cliente lo perdió)."""
+    _check_admin(request)
+    email = body.email.strip().lower()
+    tx = await db.payment_transactions.find_one({"email": email, "payment_status": "paid"})
+    if not tx:
+        raise HTTPException(status_code=404, detail="No hay compra pagada para ese email")
+    new_code = f"{secrets.randbelow(1_000_000):06d}"
+    await db.payment_transactions.update_one(
+        {"id": tx["id"]}, {"$set": {"access_code": new_code}}
+    )
+    return {"email": email, "access_code": new_code}
 
 
 # --- Editor de Puntos Vai (dónde comprar agua VAINATIVA) ---

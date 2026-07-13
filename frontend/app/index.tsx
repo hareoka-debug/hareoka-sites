@@ -62,6 +62,7 @@ export default function Paywall() {
   const [email, setEmail] = useState("");
   const [showRestore, setShowRestore] = useState(false);
   const [restoreEmail, setRestoreEmail] = useState("");
+  const [restoreCode, setRestoreCode] = useState("");
 
   // Pedir al navegador (iPhone/Safari incluido) que NO borre los datos de la app
   useEffect(() => {
@@ -172,20 +173,35 @@ export default function Paywall() {
     setRestoring(true);
     try {
       const deviceId = await getDeviceId();
-      // 1) Restaurar por email (funciona aunque el teléfono haya borrado los datos)
-      const okEmail = await restoreByEmail(restoreEmail.trim().toLowerCase(), deviceId);
-      if (okEmail) {
+      // 1) Restaurar por email + código de acceso
+      const result = await restoreByEmail(
+        restoreEmail.trim().toLowerCase(),
+        deviceId,
+        restoreCode.trim() || undefined,
+      );
+      if (result.has_access) {
         await setLocalPaid();
         router.replace("/map");
         return;
       }
-      // 2) Respaldo: verificación clásica por dispositivo / sesión pendiente
-      const ok = await verifyAccess();
-      if (ok) {
-        router.replace("/map");
-        return;
+      // Mensajes específicos según el motivo
+      if (result.reason === "code_invalid") {
+        setError("Código incorrecto. Es el número de 6 dígitos que recibiste al pagar.");
+      } else if (result.reason === "device_limit") {
+        setError(
+          `Esta compra ya tiene ${result.active_devices} de ${result.max_devices} dispositivos activos. Libera uno desde tu perfil o contacta al administrador.`,
+        );
+      } else if (result.reason === "no_payment") {
+        setError("No encontramos un pago con ese email.");
+      } else {
+        // 2) Respaldo: verificación clásica por dispositivo / sesión pendiente
+        const ok = await verifyAccess();
+        if (ok) {
+          router.replace("/map");
+          return;
+        }
+        setError("No pudimos verificar tu acceso.");
       }
-      setError("No encontramos un pago con ese email.");
     } catch {
       setError("Error de conexión. Intenta de nuevo.");
     } finally {
@@ -288,16 +304,31 @@ export default function Paywall() {
           <Text style={styles.finePrint}>Pago único por dispositivo · Pago seguro · Sin suscripciones</Text>
 
           {showRestore ? (
-            <TextInput
-              style={[styles.emailInput, { marginTop: spacing.lg }]}
-              placeholder="Email con el que pagaste"
-              placeholderTextColor="rgba(249,248,246,0.5)"
-              value={restoreEmail}
-              onChangeText={setRestoreEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              testID="restore-email-input"
-            />
+            <>
+              <TextInput
+                style={[styles.emailInput, { marginTop: spacing.lg }]}
+                placeholder="Email con el que pagaste"
+                placeholderTextColor="rgba(249,248,246,0.5)"
+                value={restoreEmail}
+                onChangeText={setRestoreEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                testID="restore-email-input"
+              />
+              <TextInput
+                style={[styles.emailInput, styles.codeInput]}
+                placeholder="Código de 6 dígitos (opcional si es tu 1er dispositivo)"
+                placeholderTextColor="rgba(249,248,246,0.5)"
+                value={restoreCode}
+                onChangeText={(t) => setRestoreCode(t.replace(/\D/g, "").slice(0, 6))}
+                keyboardType="number-pad"
+                maxLength={6}
+                testID="restore-code-input"
+              />
+              <Text style={styles.codeHint}>
+                Recibiste este código al pagar. Es obligatorio si quieres usar la app en un dispositivo nuevo (tablet, notebook, etc.).
+              </Text>
+            </>
           ) : null}
 
           <Pressable onPress={handleRestore} disabled={restoring} hitSlop={12} style={styles.restore} testID="restore-button">
@@ -419,6 +450,19 @@ const styles = StyleSheet.create({
     color: "rgba(249,248,246,0.85)",
     fontSize: 13,
     textDecorationLine: "underline",
+  },
+  codeInput: {
+    letterSpacing: 8,
+    fontSize: 18,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  codeHint: {
+    color: "rgba(249,248,246,0.55)",
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.sm,
   },
 });
 

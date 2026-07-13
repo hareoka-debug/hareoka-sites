@@ -79,9 +79,47 @@ export const fetchRoutes = () => get<RouteData[]>("/routes");
 export const fetchRoute = (id: string) => get<RouteData>(`/routes/${id}`);
 export const fetchWaterPoints = () => get<WaterPoint[]>("/water-points");
 
+export interface AccessInfo {
+  has_access: boolean;
+  email?: string;
+  is_purchaser?: boolean;
+}
+
 export async function checkAccess(deviceId: string): Promise<boolean> {
-  const data = await get<{ has_access: boolean }>(`/payments/access/${deviceId}`);
+  const data = await get<AccessInfo>(`/payments/access/${deviceId}`);
   return data.has_access;
+}
+
+export async function checkAccessDetailed(deviceId: string): Promise<AccessInfo> {
+  return get<AccessInfo>(`/payments/access/${deviceId}`);
+}
+
+export interface MyPurchaseInfo {
+  email: string;
+  access_code: string;
+  max_devices: number;
+  active_devices: number;
+  slots_remaining: number;
+  purchaser_device: string;
+  extra_devices: { device_id_short: string; device_id: string; granted_at: string }[];
+}
+
+export async function fetchMyPurchaseInfo(deviceId: string): Promise<MyPurchaseInfo | null> {
+  const res = await fetch(`${BASE}/api/payments/my-info/${deviceId}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Error ${res.status}`);
+  return res.json();
+}
+
+export async function releaseDevice(deviceId: string, targetDeviceId: string): Promise<boolean> {
+  const res = await fetch(`${BASE}/api/payments/release-device`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ device_id: deviceId, target_device_id: targetDeviceId }),
+  });
+  if (!res.ok) return false;
+  const data = await res.json();
+  return !!data.released;
 }
 
 export interface Providers {
@@ -111,18 +149,33 @@ export async function createCheckout(
   return res.json() as Promise<{ url: string; tx_id: string }>;
 }
 
-export async function restoreByEmail(email: string, deviceId: string): Promise<boolean> {
+export interface RestoreResult {
+  has_access: boolean;
+  reason?: "purchaser" | "already_granted" | "granted" | "no_payment" | "code_invalid" | "device_limit";
+  max_devices?: number;
+  active_devices?: number;
+  slots_remaining?: number;
+}
+
+export async function restoreByEmail(
+  email: string,
+  deviceId: string,
+  accessCode?: string,
+): Promise<RestoreResult> {
   const res = await fetch(`${BASE}/api/payments/restore`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, device_id: deviceId }),
+    body: JSON.stringify({
+      email,
+      device_id: deviceId,
+      access_code: accessCode || null,
+    }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => null);
     throw new Error(err?.detail || `Error ${res.status}`);
   }
-  const data = await res.json();
-  return data.has_access;
+  return (await res.json()) as RestoreResult;
 }
 
 export async function checkPaymentStatus(txId: string) {
