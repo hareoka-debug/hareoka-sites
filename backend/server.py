@@ -521,17 +521,30 @@ app.add_middleware(
 )
 
 # ---------------- Servir frontend Expo Web como estático ----------------
-# Cuando existe el build web (`/app/frontend/dist`), lo servimos en `/`.
-# Esto permite que el mismo backend sirva la web app (paywall, mapa, etc.)
-# además del API, sin depender del proxy del deploy.
-_FRONTEND_DIST = Path("/app/frontend/dist")
+# El build web (`expo export --platform web`) se copia a `backend/web_static/`
+# para que viaje con el deploy del backend. Servimos:
+#   /                  → index.html (Expo Router SPA)
+#   /_expo/**          → JS bundles y assets del build
+#   /assets/**         → imágenes/fuentes del build
+#   /favicon.ico       → favicon
+#   /<ruta-cliente>    → fallback SPA a index.html (expo-router lo maneja)
+_FRONTEND_DIST = ROOT_DIR / "web_static"
+# Fallback por si el build vive en el frontend (dev / preview)
+if not (_FRONTEND_DIST / "index.html").exists():
+    _alt = Path("/app/frontend/dist")
+    if (_alt / "index.html").exists():
+        _FRONTEND_DIST = _alt
+
 if _FRONTEND_DIST.exists() and (_FRONTEND_DIST / "index.html").exists():
+    logger.info(f"Serving Expo Web from {_FRONTEND_DIST}")
     # Servir assets estáticos (JS, imágenes, fuentes, favicon)
-    app.mount(
-        "/_expo",
-        StaticFiles(directory=str(_FRONTEND_DIST / "_expo")),
-        name="expo-assets",
-    )
+    _EXPO_DIR = _FRONTEND_DIST / "_expo"
+    if _EXPO_DIR.exists():
+        app.mount(
+            "/_expo",
+            StaticFiles(directory=str(_EXPO_DIR)),
+            name="expo-assets",
+        )
     _ASSETS_DIR = _FRONTEND_DIST / "assets"
     if _ASSETS_DIR.exists():
         app.mount(
@@ -557,6 +570,8 @@ if _FRONTEND_DIST.exists() and (_FRONTEND_DIST / "index.html").exists():
             return FileResponse(target)
         # Fallback a index.html (SPA)
         return FileResponse(_FRONTEND_DIST / "index.html")
+else:
+    logger.warning(f"Expo Web build not found at {_FRONTEND_DIST}. `/` will 404.")
 
 # Configure logging
 logging.basicConfig(
