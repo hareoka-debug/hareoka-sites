@@ -3,7 +3,7 @@ import os
 import pytest
 import requests
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL") or "https://rapa-nui-routes.preview.emergentagent.com"
+BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL") or "https://app-builder-9807.preview.emergentagent.com"
 BASE_URL = BASE_URL.rstrip("/")
 ADMIN_KEY = "RAPANUI-2026"
 
@@ -18,7 +18,7 @@ def api_client():
 # --- Routes endpoint + CORS header verification ---
 class TestRoutes:
     def test_routes_returns_11_with_cors(self, api_client):
-        headers = {"Origin": "https://rapa-nui-routes.preview.emergentagent.com"}
+        headers = {"Origin": "https://app-builder-9807.preview.emergentagent.com"}
         r = api_client.get(f"{BASE_URL}/api/routes", headers=headers, timeout=15)
         assert r.status_code == 200, r.text
         data = r.json()
@@ -27,7 +27,7 @@ class TestRoutes:
         # CORS header should be present on responses with Origin
         cors = r.headers.get("access-control-allow-origin") or r.headers.get("Access-Control-Allow-Origin")
         assert cors is not None, f"Missing CORS header. Headers: {dict(r.headers)}"
-        assert cors in ("*", "https://rapa-nui-routes.preview.emergentagent.com"), f"Unexpected CORS value: {cors}"
+        assert cors in ("*", "https://app-builder-9807.preview.emergentagent.com"), f"Unexpected CORS value: {cors}"
         # Verify circuito-hanga-roa exists
         ids = [x["id"] for x in data]
         assert "circuito-hanga-roa" in ids
@@ -37,7 +37,7 @@ class TestRoutes:
         r = api_client.options(
             f"{BASE_URL}/api/routes",
             headers={
-                "Origin": "https://rapa-nui-routes.preview.emergentagent.com",
+                "Origin": "https://app-builder-9807.preview.emergentagent.com",
                 "Access-Control-Request-Method": "GET",
             },
             timeout=15,

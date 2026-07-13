@@ -28,5 +28,5 @@
   "retest_needed": false,
   "should_main_agent_self_test": false,
   "context_for_next_testing_agent": "Iteration 3 was a targeted backend-only verification of the /api/admin/sales projection optimization. Providers now expected: stripe:true, mercadopago:true, flow:true (Flow keys are now populated in /app/backend/.env). Do NOT complete MP or Flow payments — both are PRODUCTION credentials. Existing pytest at /app/backend/tests/backend_test.py from iteration 2 still expects flow:false and returning 503 for /payments/checkout provider=flow; if re-run it will fail on TestProviders.test_providers_metadata and TestFlowCheckout.* — those tests need updating to reflect current Flow-enabled configuration. Use /app/backend/tests/test_admin_sales.py as the source of truth for iteration 3.",
-  "rca_of_issue": "No issue found. MongoDB projection is correctly restricting fields; response schema, auth guard, and aggregation math all verified end-to-end via public URL https://rapa-nui-routes.preview.emergentagent.com/api/admin/sales."
+  "rca_of_issue": "No issue found. MongoDB projection is correctly restricting fields; response schema, auth guard, and aggregation math all verified end-to-end via public URL https://app-builder-9807.preview.emergentagent.com/api/admin/sales."
 }

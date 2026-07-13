@@ -35,6 +35,6 @@
   "seed_data_creation": "None persisted. Test payment_transactions with device_id prefixed 'TEST_' were created during pytest and full-flow tests and then cleaned up. One real Stripe test payment (test card 4242) was executed against the sandbox test key and remains as a paid doc for one throwaway device_id issued in-browser — safe to leave.",
   "retest_needed": false,
   "should_main_agent_self_test": false,
-  "context_for_next_testing_agent": "Public URL: EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env (https://rapa-nui-routes.preview.emergentagent.com). Backend tests live at /app/backend/tests/backend_test.py. Frontend uses AsyncStorage-backed device_id (localStorage on web); to re-test guard, clear localStorage before navigating to /map. Stripe test card 4242 4242 4242 4242 with any future expiry, CVC 123, ZIP 12345 completes payment. Stripe checkout page displays 'CLP 2,000' confirming currency+amount are correct.",
+  "context_for_next_testing_agent": "Public URL: EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env (https://app-builder-9807.preview.emergentagent.com). Backend tests live at /app/backend/tests/backend_test.py. Frontend uses AsyncStorage-backed device_id (localStorage on web); to re-test guard, clear localStorage before navigating to /map. Stripe test card 4242 4242 4242 4242 with any future expiry, CVC 123, ZIP 12345 completes payment. Stripe checkout page displays 'CLP 2,000' confirming currency+amount are correct.",
   "rca_of_issue": "No functional issue found."
 }
