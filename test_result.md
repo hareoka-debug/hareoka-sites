@@ -143,6 +143,9 @@ backend:
         - working: true
           agent: "testing"
           comment: "✅ ICON/ASSET SERVING FIX VERIFIED - All 16 tests PASSED. USER REPORTED ISSUE: /admin panel icons (Feather, MaterialIcons) were giving 404 in production, making the panel appear broken. FIX APPLIED: Removed StaticFiles mount for /assets, now SPA fallback catchall serves /assets/* from web_static/assets/* with correct content-type. VERIFIED: (1) GET / → 200 with title ✓, (2) GET /api/ → 200 JSON ✓, (3) GET /api/no-existe → 404 ✓, (4) GET /admin → 200 SPA fallback ✓, (5) GET /map → 200 SPA fallback ✓, (6) JS bundle → 200 (2.75 MB) ✓, (7) GET /favicon.ico → 200 ✓, (8) 🎉 GET /assets/.../Feather.ttf → 200 font/ttf 54.29KB (WAS 404 - NOW FIXED!) ✓, (9) GET /assets/.../MaterialIcons.ttf → 200 font/ttf 348.48KB ✓, (10) GET /assets/no-existe-fake.png → 404 real (not SPA fallback) ✓, (11) GET /random-route → 200 SPA fallback ✓, (12) Bundle contains admin strings (2/5 verified, others may be minified) ⚠️, (13a) GET /api/admin/sales → 200 ✓, (13b) POST /api/admin/grant → 200 with access_code ✓, (13c) POST /api/admin/revoke → 200 ✓, (14) Anti-piracy regression: restore with correct/wrong code working ✓. CRITICAL FIX CONFIRMED: Icon fonts now serve with correct content-type (font/ttf) and 200 status. /admin panel will now display correctly in production with all icons visible."
+        - working: true
+          agent: "testing"
+          comment: "✅ POST-RENAME VERIFICATION COMPLETE - All 8 tests PASSED. USER REQUEST: Lightweight verification after app rename from 'frontend' to 'Descubre Rapa Nui' with SEO/Open Graph meta tags added. CHANGES: app.json slug updated, +html.tsx with lang='es' and meta tags, backend/server.py injects meta tags into index.html on-the-fly. VERIFIED: (1) GET / → 200 with <title>Descubre Rapa Nui</title>, application-name='Descubre Rapa Nui', og:title='Descubre Rapa Nui', og:description mentions 'Isla de Pascua/senderos/Rapa Nui', lang='es', theme-color='#B35D4A' ✓, (2) GET /api/ → 200 with {'message':'Rutas Rapa Nui API'} ✓, (3) GET /api/routes → 200 with 11 routes ✓, (4) GET /admin → 200 with HTML containing meta tags (SPA fallback working) ✓, (5) GET /assets/.../Feather.ttf → 200 font/ttf 54.29KB ✓, (6) GET /_expo/static/js/web/entry-*.js → 200 with 2.75MB bundle ✓, (7) GET /api/admin/sales?key=RAPANUI-2026 → 200 ✓, (8) POST /api/admin/grant + revoke flow → 200 with access_code generation and successful revocation ✓. CONCLUSION: Rename did not break any functionality. All meta tags properly injected. SEO/Open Graph/WhatsApp preview ready. Production-ready."
 
   - task: "Admin endpoints para recuperar acceso de clientes (grant/revoke/transactions)"
     implemented: true
@@ -199,12 +202,12 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 4
+  test_sequence: 5
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Icon/asset serving fix verified - all 16 tests passed"
+    - "Post-rename verification complete - all 8 tests passed"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -436,5 +439,42 @@ agent_communication:
       The /admin panel will now display correctly in production with all icons visible.
       All admin endpoints working. Anti-piracy system working. SPA fallback working correctly.
       
+  - agent: "testing"
+    message: |
+      ✅ POST-RENAME VERIFICATION COMPLETE - All 8 tests PASSED against localhost:8001.
+      
+      USER REQUEST: Lightweight verification after app rename from "frontend" to "Descubre Rapa Nui" 
+      with SEO/Open Graph meta tags added.
+      
+      CHANGES VERIFIED:
+      - app.json: slug changed from "frontend" to "descubre-rapa-nui"
+      - +html.tsx: lang="es", meta description, og:title/description, apple-mobile-web-app-title, theme-color
+      - backend/server.py: injects meta tags into <head> of index.html on-the-fly
+      
+      TEST RESULTS:
+      ✅ Test 1: GET / → 200 with all required meta tags:
+         - <title>Descubre Rapa Nui</title> ✓
+         - application-name="Descubre Rapa Nui" ✓
+         - og:title="Descubre Rapa Nui" ✓
+         - og:description mentions "Isla de Pascua/senderos/Rapa Nui" ✓
+         - <html lang="es" ✓
+         - theme-color="#B35D4A" ✓
+      ✅ Test 2: GET /api/ → 200 with {"message":"Rutas Rapa Nui API"} ✓
+      ✅ Test 3: GET /api/routes → 200 with 11 routes ✓
+      ✅ Test 4: GET /admin → 200 with HTML containing meta tags (SPA fallback working) ✓
+      ✅ Test 5: GET /assets/.../Feather.ttf → 200 font/ttf 54.29KB ✓
+      ✅ Test 6: GET /_expo/static/js/web/entry-*.js → 200 with 2.75MB bundle ✓
+      ✅ Test 7: GET /api/admin/sales?key=RAPANUI-2026 → 200 ✓
+      ✅ Test 8: POST /api/admin/grant + revoke flow → 200 with access_code=970722, revocation successful ✓
+      
+      CONCLUSION:
+      - Rename did NOT break any functionality
+      - All meta tags properly injected for SEO/Open Graph/WhatsApp preview
+      - Static file serving (fonts, JS bundles) working correctly
+      - Admin endpoints working correctly
+      - SPA fallback working correctly
+      
+      PRODUCTION-READY: App is ready for deployment with new name and SEO meta tags.
+
       PRODUCTION-READY: Ready for Emergent deployment. The icon 404 bug is FIXED.
 

@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request
-from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.responses import RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -871,6 +871,40 @@ if not (_FRONTEND_DIST / "index.html").exists():
 
 if _FRONTEND_DIST.exists() and (_FRONTEND_DIST / "index.html").exists():
     logger.info(f"Serving Expo Web from {_FRONTEND_DIST}")
+
+    # Meta tags inyectados en <head> del index.html para SEO / Open Graph / WhatsApp.
+    # Se aplican al vuelo porque Expo Router `output: single` no soporta editar el head
+    # desde `+html.tsx` para el bundle web final.
+    _APP_NAME = "Descubre Rapa Nui"
+    _APP_DESC = (
+        "La guía completa de senderos, rutas y sitios arqueológicos de Isla de Pascua (Rapa Nui). "
+        "Mapa GPS con moáis, playas, puntos de agua y descripción de cada sendero."
+    )
+    _META_INJECT = (
+        f'    <meta name="description" content="{_APP_DESC}" />\n'
+        f'    <meta name="application-name" content="{_APP_NAME}" />\n'
+        f'    <meta name="apple-mobile-web-app-title" content="{_APP_NAME}" />\n'
+        f'    <meta name="apple-mobile-web-app-capable" content="yes" />\n'
+        f'    <meta name="theme-color" content="#B35D4A" />\n'
+        f'    <meta property="og:title" content="{_APP_NAME}" />\n'
+        f'    <meta property="og:description" content="{_APP_DESC}" />\n'
+        f'    <meta property="og:type" content="website" />\n'
+        f'    <meta property="og:locale" content="es_CL" />\n'
+        f'    <meta name="twitter:card" content="summary_large_image" />\n'
+        f'    <meta name="twitter:title" content="{_APP_NAME}" />\n'
+        f'    <meta name="twitter:description" content="{_APP_DESC}" />\n'
+    )
+    try:
+        _INDEX_HTML = (_FRONTEND_DIST / "index.html").read_text(encoding="utf-8")
+        _INDEX_HTML = _INDEX_HTML.replace("<html lang=\"en\"", "<html lang=\"es\"")
+        if "application-name" not in _INDEX_HTML:
+            _INDEX_HTML = _INDEX_HTML.replace(
+                "<title>", _META_INJECT + "    <title>", 1
+            )
+    except Exception as _e:
+        logger.warning(f"No pude inyectar meta tags: {_e}")
+        _INDEX_HTML = (_FRONTEND_DIST / "index.html").read_text(encoding="utf-8")
+
     # Servir el bundle JS bajo /_expo (StaticFiles maneja bien los cache headers).
     _EXPO_DIR = _FRONTEND_DIST / "_expo"
     if _EXPO_DIR.exists():
@@ -897,7 +931,6 @@ if _FRONTEND_DIST.exists() and (_FRONTEND_DIST / "index.html").exists():
         # Servir archivos concretos que existan en web_static/
         target = _FRONTEND_DIST / full_path
         if full_path and target.is_file():
-            # Determinar tipo MIME básico para fuentes/imágenes
             ext = target.suffix.lower()
             media_type = None
             if ext == ".ttf":
@@ -910,11 +943,15 @@ if _FRONTEND_DIST.exists() and (_FRONTEND_DIST / "index.html").exists():
                 media_type = "font/otf"
             return FileResponse(target, media_type=media_type)
         # Si el path incluye una extensión de archivo (fuente/imagen/js) y no existe → 404 real
-        # para que el cliente sepa que el asset no está.
         if "." in full_path.split("/")[-1]:
             raise HTTPException(status_code=404, detail="Not Found")
-        # Fallback a index.html (SPA)
-        return FileResponse(_FRONTEND_DIST / "index.html")
+        # Fallback SPA con meta tags inyectados (SEO / Open Graph)
+        return Response(content=_INDEX_HTML, media_type="text/html")
+
+    # Root también sirve el HTML enriquecido
+    @app.get("/", include_in_schema=False)
+    async def root_index():
+        return Response(content=_INDEX_HTML, media_type="text/html")
 else:
     logger.warning(f"Expo Web build not found at {_FRONTEND_DIST}. `/` will 404.")
 
