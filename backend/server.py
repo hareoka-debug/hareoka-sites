@@ -71,9 +71,12 @@ PRICE_CLP_DISPLAY = 3000
 PRICE_AMOUNT_FOR_STRIPE_LIB = 30.0
 
 # ---------------- Control de acceso ----------------
-# Máximo de dispositivos que pueden compartir un mismo pago (email + código).
-# Ejemplo: 3 = comprador puede usar celular + tablet + notebook.
-MAX_DEVICES_PER_PAYMENT = int(os.environ.get("MAX_DEVICES_PER_PAYMENT", "3"))
+# 1 email = 1 pago = 1 dispositivo.
+MAX_DEVICES_PER_PAYMENT = int(os.environ.get("MAX_DEVICES_PER_PAYMENT", "1"))
+# Sesión válida por este tiempo desde la última verificación (48h por defecto).
+SESSION_TTL_HOURS = int(os.environ.get("SESSION_TTL_HOURS", "48"))
+# Longitud del código de acceso (4 dígitos).
+ACCESS_CODE_LENGTH = 4
 
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
 MP_ACCESS_TOKEN = os.environ.get("MP_ACCESS_TOKEN", "")
@@ -89,6 +92,7 @@ class CheckoutRequest(BaseModel):
     origin_url: str
     provider: str = "stripe"  # stripe | mercadopago | flow
     email: str | None = None  # requerido por Flow
+    whatsapp_phone: str | None = None  # ej "+56912345678" — para enviar el código
 
 
 def _stripe(request: Request) -> StripeCheckout:
@@ -140,14 +144,15 @@ async def create_payment_checkout(body: CheckoutRequest, request: Request):
     origin = body.origin_url.rstrip("/")
     host_url = str(request.base_url).rstrip("/")
     tx_id = str(uuid.uuid4())
-    # Código de acceso único de 6 dígitos — el cliente lo verá post-pago y
-    # deberá usarlo para autorizar otros dispositivos (tablet, notebook).
-    access_code = f"{secrets.randbelow(1_000_000):06d}"
+    # Código de acceso único de 4 dígitos — el cliente lo verá post-pago y
+    # deberá usarlo para autorizar el mismo dispositivo tras 48h o al cerrar la app.
+    access_code = f"{secrets.randbelow(10 ** ACCESS_CODE_LENGTH):0{ACCESS_CODE_LENGTH}d}"
     doc = {
         "id": tx_id,
         "provider": body.provider,
         "device_id": body.device_id,
         "email": email,
+        "whatsapp_phone": (body.whatsapp_phone or "").strip(),
         "origin_url": origin,
         "amount_clp": PRICE_CLP_DISPLAY,
         "currency": "clp",
@@ -314,58 +319,135 @@ async def get_payment_status(tx_id: str, request: Request):
         raise HTTPException(status_code=502, detail="No se pudo verificar el pago")
 
 
+def _is_session_valid(paid_doc: dict) -> bool:
+    """Verifica si la sesión del dispositivo sigue activa (< SESSION_TTL_HOURS
+    desde la última verificación). Si nunca se verificó, usa `paid_at`."""
+    from datetime import timedelta
+    ref = paid_doc.get("last_verified_at") or paid_doc.get("paid_at")
+    if not ref:
+        return False
+    try:
+        # Normalizar timezone
+        ref_dt = datetime.fromisoformat(ref.replace("Z", "+00:00"))
+        if ref_dt.tzinfo is None:
+            ref_dt = ref_dt.replace(tzinfo=timezone.utc)
+        elapsed = datetime.now(timezone.utc) - ref_dt
+        return elapsed < timedelta(hours=SESSION_TTL_HOURS)
+    except Exception:
+        return False
+
+
 @api_router.get("/payments/access/{device_id}")
 async def check_access(device_id: str):
-    """Verifica si un device_id tiene acceso: fue el dispositivo comprador
-    o tiene un access_grant válido asociado a una compra pagada."""
+    """Verifica si un device_id tiene acceso VÁLIDO (pago + sesión activa <48h).
+    Retorna:
+      - has_access: True si tiene sesión activa
+      - needs_verification: True si pagó pero la sesión expiró
+      - has_access: False si nunca pagó
+    """
     paid = await db.payment_transactions.find_one(
         {"device_id": device_id, "payment_status": "paid"}
     )
     if paid:
-        return {"has_access": True, "email": paid.get("email"), "is_purchaser": True}
+        if _is_session_valid(paid):
+            return {"has_access": True, "email": paid.get("email"), "is_purchaser": True}
+        # Pagó pero necesita re-verificar
+        return {
+            "has_access": False,
+            "needs_verification": True,
+            "email": paid.get("email"),
+            "is_purchaser": True,
+        }
+
     grant = await db.access_grants.find_one({"device_id": device_id})
     if grant:
-        # Verificamos que la transacción origen siga siendo válida (paid)
         source = await db.payment_transactions.find_one({"id": grant.get("source_tx")})
         if source and source.get("payment_status") == "paid":
-            return {"has_access": True, "email": grant.get("email"), "is_purchaser": False}
+            # Los grants manuales (admin) no tienen sesión expirable
+            if source.get("provider") == "manual":
+                return {"has_access": True, "email": grant.get("email"), "is_purchaser": False}
+            # Grants normales: usan el timestamp del grant como base de sesión
+            grant_synth = {
+                "last_verified_at": grant.get("verified_at") or grant.get("granted_at"),
+                "paid_at": grant.get("granted_at"),
+            }
+            if _is_session_valid(grant_synth):
+                return {"has_access": True, "email": grant.get("email"), "is_purchaser": False}
+            return {
+                "has_access": False,
+                "needs_verification": True,
+                "email": grant.get("email"),
+                "is_purchaser": False,
+            }
     return {"has_access": False}
+
+
+class VerifyCodeRequest(BaseModel):
+    device_id: str
+    email: str
+    access_code: str
+
+
+@api_router.post("/payments/verify-code")
+async def verify_code(body: VerifyCodeRequest):
+    """Verifica email + código y renueva la sesión de 48h en el dispositivo actual.
+    Solo funciona en el MISMO dispositivo que compró (u obtuvo grant)."""
+    email = body.email.strip().lower()
+    code = (body.access_code or "").strip()
+    if not re.match(r"^\S+@\S+\.\S+$", email):
+        raise HTTPException(status_code=400, detail="Email inválido")
+    if len(code) != ACCESS_CODE_LENGTH or not code.isdigit():
+        raise HTTPException(status_code=400, detail=f"Código debe ser de {ACCESS_CODE_LENGTH} dígitos")
+
+    # Buscar la compra ligada a este dispositivo
+    paid = await db.payment_transactions.find_one(
+        {"device_id": body.device_id, "email": email, "payment_status": "paid"}
+    )
+    if paid:
+        # Grants manuales pueden usar cualquier código válido guardado, o entrar sin código.
+        expected = str(paid.get("access_code") or "").strip()
+        if paid.get("provider") == "manual" or (expected and code == expected):
+            now = datetime.now(timezone.utc).isoformat()
+            await db.payment_transactions.update_one(
+                {"id": paid["id"]}, {"$set": {"last_verified_at": now}}
+            )
+            return {"verified": True, "reason": "purchaser", "session_ttl_hours": SESSION_TTL_HOURS}
+        return {"verified": False, "reason": "code_invalid"}
+
+    # Si no es comprador directo, ¿es un grant en el mismo dispositivo?
+    grant = await db.access_grants.find_one({"device_id": body.device_id, "email": email})
+    if grant:
+        source = await db.payment_transactions.find_one({"id": grant.get("source_tx")})
+        if source and source.get("payment_status") == "paid":
+            expected = str(source.get("access_code") or "").strip()
+            if source.get("provider") == "manual" or (expected and code == expected):
+                now = datetime.now(timezone.utc).isoformat()
+                await db.access_grants.update_one(
+                    {"device_id": body.device_id}, {"$set": {"verified_at": now}}
+                )
+                return {"verified": True, "reason": "granted", "session_ttl_hours": SESSION_TTL_HOURS}
+            return {"verified": False, "reason": "code_invalid"}
+    return {"verified": False, "reason": "no_payment"}
 
 
 @api_router.get("/payments/my-info/{device_id}")
 async def my_purchase_info(device_id: str):
     """Info del pago para el dispositivo comprador: email, código de acceso,
-    dispositivos activos y cuántos slots quedan.
-    Solo devuelve el código si device_id es el que originalmente pagó."""
+    número de WhatsApp registrado.
+    Solo devuelve datos si device_id es el que originalmente pagó."""
     paid = await db.payment_transactions.find_one(
         {"device_id": device_id, "payment_status": "paid"}
     )
     if not paid:
         raise HTTPException(status_code=404, detail="Este dispositivo no ha comprado")
 
-    grants = await db.access_grants.find(
-        {"source_tx": paid["id"]},
-        {"_id": 0, "device_id": 1, "granted_at": 1}
-    ).sort("granted_at", -1).to_list(20)
-
-    max_devices = paid.get("max_devices", MAX_DEVICES_PER_PAYMENT)
-    # +1 porque el device comprador cuenta como uno
-    active_count = 1 + len(grants)
     return {
         "email": paid.get("email"),
         "access_code": paid.get("access_code"),
-        "max_devices": max_devices,
-        "active_devices": active_count,
-        "slots_remaining": max(0, max_devices - active_count),
-        "purchaser_device": (paid.get("device_id") or "")[:10] + "…",
-        "extra_devices": [
-            {
-                "device_id_short": (g.get("device_id") or "")[:10] + "…",
-                "device_id": g.get("device_id"),
-                "granted_at": g.get("granted_at"),
-            }
-            for g in grants
-        ],
+        "whatsapp_phone": paid.get("whatsapp_phone", ""),
+        "max_devices": paid.get("max_devices", MAX_DEVICES_PER_PAYMENT),
+        "session_ttl_hours": SESSION_TTL_HOURS,
+        "last_verified_at": paid.get("last_verified_at") or paid.get("paid_at"),
     }
 
 
@@ -376,7 +458,7 @@ class ReleaseDeviceRequest(BaseModel):
 
 @api_router.post("/payments/release-device")
 async def release_device(body: ReleaseDeviceRequest):
-    """El comprador libera uno de sus dispositivos extra (ej: perdió su tablet)."""
+    """El comprador libera un dispositivo grant (rara vez usado en modelo 1:1)."""
     paid = await db.payment_transactions.find_one(
         {"device_id": body.device_id, "payment_status": "paid"}
     )
@@ -399,73 +481,75 @@ class RestoreRequest(BaseModel):
 
 @api_router.post("/payments/restore")
 async def restore_by_email(body: RestoreRequest):
-    """Vincula el dispositivo a una compra existente.
-    Requiere: email + código de acceso (6 dígitos que el cliente vio al pagar).
-    Enforza el máximo de dispositivos por compra."""
+    """MODELO 1:1 — Restaura la sesión en el MISMO dispositivo que pagó.
+    Requiere email + código de acceso (4 dígitos).
+    NO permite pasar la compra a otro dispositivo.
+    Uso típico: cliente cerró la app o pasaron 48h → re-verifica y sigue.
+    """
     email = body.email.strip().lower()
     if not re.match(r"^\S+@\S+\.\S+$", email):
         raise HTTPException(status_code=400, detail="Email inválido")
 
-    # ¿Este dispositivo ya es el comprador original? Entonces acceso directo.
+    # Caso 1: este dispositivo es el comprador original
     purchaser = await db.payment_transactions.find_one(
         {"device_id": body.device_id, "email": email, "payment_status": "paid"}
     )
     if purchaser:
-        return {"has_access": True, "reason": "purchaser"}
+        # Grants manuales entran sin código; el resto requiere código correcto
+        is_manual = purchaser.get("provider") == "manual"
+        expected = str(purchaser.get("access_code") or "").strip()
+        given = (body.access_code or "").strip()
+        if is_manual or (expected and given == expected):
+            # Renovar sesión
+            now = datetime.now(timezone.utc).isoformat()
+            await db.payment_transactions.update_one(
+                {"id": purchaser["id"]}, {"$set": {"last_verified_at": now}}
+            )
+            return {"has_access": True, "reason": "purchaser", "session_ttl_hours": SESSION_TTL_HOURS}
+        return {"has_access": False, "reason": "code_invalid"}
 
-    # ¿Este dispositivo ya tiene grant activo con este email? Entonces acceso directo.
-    existing_grant = await db.access_grants.find_one(
-        {"device_id": body.device_id, "email": email}
-    )
-    if existing_grant:
-        return {"has_access": True, "reason": "already_granted"}
-
-    # Buscar la compra por email
-    paid = await db.payment_transactions.find_one({"email": email, "payment_status": "paid"})
-    if not paid:
-        return {"has_access": False, "reason": "no_payment"}
-
-    # Grants manuales (sin código): el admin concedió acceso, permitir sin código
-    is_manual = paid.get("provider") == "manual"
-
-    # Verificar código de acceso (excepto grants manuales)
-    if not is_manual:
-        expected_code = str(paid.get("access_code") or "").strip()
-        given_code = (body.access_code or "").strip()
-        if not expected_code:
-            # Compra vieja sin código — dejamos entrar por email (compatibilidad)
-            pass
-        elif given_code != expected_code:
+    # Caso 2: este dispositivo tiene un grant activo con este email
+    grant = await db.access_grants.find_one({"device_id": body.device_id, "email": email})
+    if grant:
+        source = await db.payment_transactions.find_one({"id": grant.get("source_tx")})
+        if source and source.get("payment_status") == "paid":
+            is_manual = source.get("provider") == "manual"
+            expected = str(source.get("access_code") or "").strip()
+            given = (body.access_code or "").strip()
+            if is_manual or (expected and given == expected):
+                now = datetime.now(timezone.utc).isoformat()
+                await db.access_grants.update_one(
+                    {"device_id": body.device_id}, {"$set": {"verified_at": now}}
+                )
+                return {"has_access": True, "reason": "already_granted", "session_ttl_hours": SESSION_TTL_HOURS}
             return {"has_access": False, "reason": "code_invalid"}
 
-    # Enforzar límite de dispositivos
-    max_devices = paid.get("max_devices", MAX_DEVICES_PER_PAYMENT)
-    current_grants = await db.access_grants.count_documents({"source_tx": paid["id"]})
-    active_devices = 1 + current_grants  # +1 por el comprador
-    if active_devices >= max_devices:
+    # Caso 3: hay una compra con ese email en OTRO dispositivo
+    other = await db.payment_transactions.find_one({"email": email, "payment_status": "paid"})
+    if other:
+        # Grants manuales del admin: permitimos vincular este dispositivo (rescate cliente)
+        if other.get("provider") == "manual":
+            now = datetime.now(timezone.utc).isoformat()
+            await db.access_grants.update_one(
+                {"device_id": body.device_id},
+                {"$set": {
+                    "device_id": body.device_id,
+                    "email": email,
+                    "source_tx": other["id"],
+                    "granted_at": now,
+                    "verified_at": now,
+                }},
+                upsert=True,
+            )
+            return {"has_access": True, "reason": "manual_grant", "session_ttl_hours": SESSION_TTL_HOURS}
+        # Compra real en otro dispositivo → BLOQUEO. La app es 1:1.
         return {
             "has_access": False,
-            "reason": "device_limit",
-            "max_devices": max_devices,
-            "active_devices": active_devices,
+            "reason": "wrong_device",
+            "message": "Esta compra pertenece a otro dispositivo. La app se usa solo en el dispositivo que pagó.",
         }
 
-    # Crear el grant
-    await db.access_grants.update_one(
-        {"device_id": body.device_id},
-        {"$set": {
-            "device_id": body.device_id,
-            "email": email,
-            "source_tx": paid["id"],
-            "granted_at": datetime.now(timezone.utc).isoformat(),
-        }},
-        upsert=True,
-    )
-    return {
-        "has_access": True,
-        "reason": "granted",
-        "slots_remaining": max_devices - active_devices - 1,
-    }
+    return {"has_access": False, "reason": "no_payment"}
 
 
 # --- Retorno de Flow (Flow redirige al pagador vía POST con el token) ---
@@ -632,7 +716,7 @@ async def admin_grant(body: GrantRequest, request: Request):
 
     now = datetime.now(timezone.utc).isoformat()
     tx_id = str(uuid.uuid4())
-    access_code = f"{secrets.randbelow(1_000_000):06d}"
+    access_code = f"{secrets.randbelow(10 ** ACCESS_CODE_LENGTH):0{ACCESS_CODE_LENGTH}d}"
     await db.payment_transactions.insert_one({
         "id": tx_id,
         "provider": "manual",
@@ -673,7 +757,7 @@ async def admin_grant_bulk(body: BulkGrantRequest, request: Request):
             continue
         now = datetime.now(timezone.utc).isoformat()
         tx_id = str(uuid.uuid4())
-        access_code = f"{secrets.randbelow(1_000_000):06d}"
+        access_code = f"{secrets.randbelow(10 ** ACCESS_CODE_LENGTH):0{ACCESS_CODE_LENGTH}d}"
         await db.payment_transactions.insert_one({
             "id": tx_id,
             "provider": "manual",
@@ -781,7 +865,7 @@ async def admin_regen_code(body: RegenCodeRequest, request: Request):
     tx = await db.payment_transactions.find_one({"email": email, "payment_status": "paid"})
     if not tx:
         raise HTTPException(status_code=404, detail="No hay compra pagada para ese email")
-    new_code = f"{secrets.randbelow(1_000_000):06d}"
+    new_code = f"{secrets.randbelow(10 ** ACCESS_CODE_LENGTH):0{ACCESS_CODE_LENGTH}d}"
     await db.payment_transactions.update_one(
         {"id": tx["id"]}, {"$set": {"access_code": new_code}}
     )

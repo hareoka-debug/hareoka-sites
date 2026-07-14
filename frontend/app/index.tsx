@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   Providers,
-  checkAccess,
+  checkAccessDetailed,
   checkPaymentStatus,
   clearPendingSession,
   createCheckout,
@@ -60,6 +60,7 @@ export default function Paywall() {
   const [providers, setProviders] = useState<Providers | null>(null);
   const [method, setMethod] = useState<string>("mercadopago");
   const [email, setEmail] = useState("");
+  const [whatsappPhone, setWhatsappPhone] = useState("");
   const [showRestore, setShowRestore] = useState(false);
   const [restoreEmail, setRestoreEmail] = useState("");
   const [restoreCode, setRestoreCode] = useState("");
@@ -77,7 +78,24 @@ export default function Paywall() {
 
   const verifyAccess = useCallback(async (): Promise<boolean> => {
     const localPaid = await getLocalPaid();
-    if (localPaid) return true;
+    if (localPaid) {
+      // Verificamos también con el servidor: la sesión puede haber expirado (48h)
+      try {
+        const deviceId = await getDeviceId();
+        const detailed = await checkAccessDetailed(deviceId);
+        if (detailed.has_access) return true;
+        if (detailed.needs_verification) {
+          // La sesión venció → forzamos re-login por email + código
+          await setLocalPaid(); // dejamos flag "ya pagó" pero mostramos restore
+          setShowRestore(true);
+          setRestoreEmail(detailed.email || "");
+          return false;
+        }
+      } catch {
+        // sin conexión → confiamos en el flag local
+        return true;
+      }
+    }
     const deviceId = await getDeviceId();
 
     // ¿Hay un pago pendiente de una sesión anterior?
@@ -92,18 +110,24 @@ export default function Paywall() {
         }
         if (st.status === "expired") await clearPendingSession();
       } catch {
-        // ignorar, se reintenta con checkAccess
+        // ignorar
       }
     }
 
     try {
-      const paid = await checkAccess(deviceId);
-      if (paid) {
+      const detailed = await checkAccessDetailed(deviceId);
+      if (detailed.has_access) {
         await setLocalPaid();
         return true;
       }
+      if (detailed.needs_verification) {
+        // Pagó pero sesión expiró: mostrar restore automáticamente
+        setShowRestore(true);
+        setRestoreEmail(detailed.email || "");
+        return false;
+      }
     } catch {
-      // sin conexión: se queda en paywall
+      // sin conexión
     }
     return false;
   }, []);
@@ -132,23 +156,34 @@ export default function Paywall() {
       setError("Ingresa un email válido: es tu respaldo para recuperar la compra.");
       return;
     }
+    const phone = whatsappPhone.trim().replace(/[^\d+]/g, "");
+    if (phone && !/^\+?\d{8,15}$/.test(phone)) {
+      setError("Ingresa un número de WhatsApp válido (ej: +56912345678).");
+      return;
+    }
     setPaying(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       const deviceId = await getDeviceId();
       await storage.setItem("rapa-nui-email", email.trim().toLowerCase());
+      if (phone) await storage.setItem("rapa-nui-phone", phone);
       const origin =
         Platform.OS === "web" && typeof window !== "undefined"
           ? window.location.origin
           : (process.env.EXPO_PUBLIC_BACKEND_URL as string);
-      const { url, tx_id } = await createCheckout(deviceId, origin, method, email.trim());
+      const { url, tx_id } = await createCheckout(
+        deviceId,
+        origin,
+        method,
+        email.trim(),
+        phone || undefined,
+      );
       await setPendingSession(tx_id);
       if (Platform.OS === "web" && typeof window !== "undefined") {
         window.location.href = url;
         return;
       }
       await WebBrowser.openBrowserAsync(url);
-      // Al volver del navegador, verificar si pagó
       const ok = await verifyAccess();
       if (ok) router.replace("/map");
     } catch (e: any) {
@@ -186,20 +221,15 @@ export default function Paywall() {
       }
       // Mensajes específicos según el motivo
       if (result.reason === "code_invalid") {
-        setError("Código incorrecto. Es el número de 6 dígitos que recibiste al pagar.");
-      } else if (result.reason === "device_limit") {
+        setError("Código incorrecto. Es el número de 4 dígitos que recibiste al pagar.");
+      } else if (result.reason === "wrong_device") {
         setError(
-          `Esta compra ya tiene ${result.active_devices} de ${result.max_devices} dispositivos activos. Libera uno desde tu perfil o contacta al administrador.`,
+          result.message ||
+            "Esta compra pertenece a otro dispositivo. La app se usa solo en el dispositivo que pagó.",
         );
       } else if (result.reason === "no_payment") {
         setError("No encontramos un pago con ese email.");
       } else {
-        // 2) Respaldo: verificación clásica por dispositivo / sesión pendiente
-        const ok = await verifyAccess();
-        if (ok) {
-          router.replace("/map");
-          return;
-        }
         setError("No pudimos verificar tu acceso.");
       }
     } catch {
@@ -287,6 +317,19 @@ export default function Paywall() {
             testID="pay-email-input"
           />
 
+          <TextInput
+            style={styles.emailInput}
+            placeholder="Tu WhatsApp (+56912345678)"
+            placeholderTextColor="rgba(249,248,246,0.5)"
+            value={whatsappPhone}
+            onChangeText={setWhatsappPhone}
+            keyboardType="phone-pad"
+            testID="pay-whatsapp-input"
+          />
+          <Text style={styles.helpLine}>
+            Enviaremos tu código de acceso de 4 dígitos a este WhatsApp.
+          </Text>
+
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <Pressable
@@ -317,16 +360,16 @@ export default function Paywall() {
               />
               <TextInput
                 style={[styles.emailInput, styles.codeInput]}
-                placeholder="Código de 6 dígitos (opcional si es tu 1er dispositivo)"
+                placeholder="Código de 4 dígitos"
                 placeholderTextColor="rgba(249,248,246,0.5)"
                 value={restoreCode}
-                onChangeText={(t) => setRestoreCode(t.replace(/\D/g, "").slice(0, 6))}
+                onChangeText={(t) => setRestoreCode(t.replace(/\D/g, "").slice(0, 4))}
                 keyboardType="number-pad"
-                maxLength={6}
+                maxLength={4}
                 testID="restore-code-input"
               />
               <Text style={styles.codeHint}>
-                Recibiste este código al pagar. Es obligatorio si quieres usar la app en un dispositivo nuevo (tablet, notebook, etc.).
+                Es el código que recibiste al pagar. Solo funciona en el mismo dispositivo con el que compraste.
               </Text>
             </>
           ) : null}
@@ -463,6 +506,12 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     marginTop: -spacing.sm,
     marginBottom: spacing.sm,
+  },
+  helpLine: {
+    color: "rgba(249,248,246,0.55)",
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: -spacing.xs,
   },
 });
 

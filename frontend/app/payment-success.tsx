@@ -13,8 +13,7 @@ import {
   StyleSheet,
   Text,
   View,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+} from "react-native";import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   MyPurchaseInfo,
@@ -102,10 +101,10 @@ export default function PaymentSuccess() {
   const buildShareMessage = () => {
     if (!info) return "";
     return (
-      `🗿 Descubre Rapa Nui — mi acceso a la guía\n\n` +
-      `Email: ${info.email}\n` +
-      `Código: ${info.access_code}\n\n` +
-      `⚠️ Guarda este mensaje. Este código es tuyo y solo funcionará en hasta ${info.max_devices} dispositivos.`
+      `🗿 Descubre Rapa Nui\n\n` +
+      `Tu código de acceso:  *${info.access_code}*\n` +
+      `Email: ${info.email}\n\n` +
+      `Este código lo necesitarás cuando cierres la app o pasen ${info.session_ttl_hours ?? 48} horas. Solo funciona en el mismo dispositivo con el que compraste.`
     );
   };
 
@@ -113,7 +112,12 @@ export default function PaymentSuccess() {
     if (!info) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     const msg = buildShareMessage();
-    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+    // Si tenemos el número del cliente, abrimos wa.me/PHONE para que se envíe
+    // el código a sí mismo. Si no, abrimos wa.me sin destinatario (el usuario elige).
+    const phone = (info.whatsapp_phone || "").replace(/[^\d]/g, "");
+    const url = phone
+      ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
     try {
       if (Platform.OS === "web" && typeof window !== "undefined") {
         window.open(url, "_blank");
@@ -121,18 +125,7 @@ export default function PaymentSuccess() {
       }
       await Linking.openURL(url);
     } catch {
-      // fallback: share nativo
       await Share.share({ message: msg }).catch(() => {});
-    }
-  };
-
-  const handleShareGeneric = async () => {
-    if (!info) return;
-    const message = buildShareMessage();
-    try {
-      await Share.share({ message });
-    } catch {
-      /* ignore */
     }
   };
 
@@ -160,7 +153,8 @@ export default function PaymentSuccess() {
           </View>
           <Text style={styles.title}>¡Iorana! Pago exitoso</Text>
           <Text style={styles.sub}>
-            Ya tienes acceso completo a todas las rutas urbanas y rurales de Rapa Nui en este dispositivo.
+            Ya tienes acceso a la guía en este dispositivo. Vas a poder usarla las próximas 48 horas
+            sin volver a ingresar el código.
           </Text>
 
           {info?.access_code ? (
@@ -177,9 +171,8 @@ export default function PaymentSuccess() {
               </Text>
 
               <Text style={styles.codeExplain}>
-                ⚠️ <Text style={styles.bold}>Guárdalo bien</Text>. Lo necesitarás para usar la app en
-                tu tablet o computador (hasta {info.max_devices} dispositivos). Si lo pierdes,
-                escríbenos con tu comprobante de pago.
+                Este código lo necesitarás cuando cierres la app o pasen {info.session_ttl_hours ?? 48} horas.
+                Solo funciona en este mismo dispositivo.
               </Text>
 
               <View style={styles.actions}>
@@ -197,11 +190,7 @@ export default function PaymentSuccess() {
                   testID="share-whatsapp"
                 >
                   <Feather name="message-circle" size={16} color="#FFFFFF" />
-                  <Text style={styles.waText}>Enviar por WhatsApp</Text>
-                </Pressable>
-                <Pressable style={styles.shareBtn} onPress={handleShareGeneric}>
-                  <Feather name="share-2" size={16} color={colors.onSurfaceSecondary} />
-                  <Text style={styles.shareText}>Otras apps</Text>
+                  <Text style={styles.waText}>Enviar a mi WhatsApp</Text>
                 </Pressable>
               </View>
             </View>

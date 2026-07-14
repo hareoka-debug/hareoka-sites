@@ -83,6 +83,7 @@ export interface AccessInfo {
   has_access: boolean;
   email?: string;
   is_purchaser?: boolean;
+  needs_verification?: boolean;
 }
 
 export async function checkAccess(deviceId: string): Promise<boolean> {
@@ -97,17 +98,39 @@ export async function checkAccessDetailed(deviceId: string): Promise<AccessInfo>
 export interface MyPurchaseInfo {
   email: string;
   access_code: string;
+  whatsapp_phone: string;
   max_devices: number;
-  active_devices: number;
-  slots_remaining: number;
-  purchaser_device: string;
-  extra_devices: { device_id_short: string; device_id: string; granted_at: string }[];
+  session_ttl_hours: number;
+  last_verified_at: string | null;
 }
 
 export async function fetchMyPurchaseInfo(deviceId: string): Promise<MyPurchaseInfo | null> {
   const res = await fetch(`${BASE}/api/payments/my-info/${deviceId}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Error ${res.status}`);
+  return res.json();
+}
+
+export interface VerifyCodeResult {
+  verified: boolean;
+  reason?: "purchaser" | "granted" | "code_invalid" | "no_payment";
+  session_ttl_hours?: number;
+}
+
+export async function verifyAccessCode(
+  deviceId: string,
+  email: string,
+  accessCode: string,
+): Promise<VerifyCodeResult> {
+  const res = await fetch(`${BASE}/api/payments/verify-code`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ device_id: deviceId, email, access_code: accessCode }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.detail || `Error ${res.status}`);
+  }
   return res.json();
 }
 
@@ -136,11 +159,18 @@ export async function createCheckout(
   originUrl: string,
   provider: string,
   email?: string,
+  whatsappPhone?: string,
 ) {
   const res = await fetch(`${BASE}/api/payments/checkout`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ device_id: deviceId, origin_url: originUrl, provider, email }),
+    body: JSON.stringify({
+      device_id: deviceId,
+      origin_url: originUrl,
+      provider,
+      email,
+      whatsapp_phone: whatsappPhone,
+    }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => null);
@@ -151,10 +181,9 @@ export async function createCheckout(
 
 export interface RestoreResult {
   has_access: boolean;
-  reason?: "purchaser" | "already_granted" | "granted" | "no_payment" | "code_invalid" | "device_limit";
-  max_devices?: number;
-  active_devices?: number;
-  slots_remaining?: number;
+  reason?: "purchaser" | "already_granted" | "manual_grant" | "no_payment" | "code_invalid" | "wrong_device";
+  session_ttl_hours?: number;
+  message?: string;
 }
 
 export async function restoreByEmail(
