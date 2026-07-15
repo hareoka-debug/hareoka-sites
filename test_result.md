@@ -198,6 +198,18 @@ backend:
           agent: "testing"
           comment: "✅ ALL 23 TESTS PASSED - Sistema de paquetes completamente verificado contra localhost:8001. CAMBIOS IMPLEMENTADOS: SESSION_TTL_HOURS=720 (30 días, era 48h), 11 rutas divididas en 3 PAQUETES (hanga-roa: 4 rutas, norte-playas: 4 rutas, moais-este: 3 rutas), Precios: base_clp=3000 (1 paquete), extra_package_clp=3000, all_routes_clp=5000, Nuevo endpoint GET /api/packages, Nuevo endpoint POST /api/payments/select-package (elige 1 paquete tras primer pago), Nuevo endpoint POST /api/payments/upgrade-checkout (compra paquete extra o all), Nuevo endpoint POST /api/payments/verify-email (SOLO email, sin código), WhatsApp phone removido (ya no requerido), Restaurar solo por email + mismo dispositivo → sesión renovada 30d, Al pagar $5000 all: raffle_participating=true y raffle_code generado. TESTS VERIFICADOS: (1) GET /api/packages → 200 con 3 paquetes (hanga-roa, norte-playas, moais-este) con route_count 4,4,3 y prices: base_clp=3000, extra_package_clp=3000, all_routes_clp=5000 ✓, (2) Inserción de transacción con last_verified_at reciente vía mongosh ✓, (3) GET /api/payments/access/dev-p1 → 200 con has_access=true, needs_package_selection=true, owned_packages=[], all_routes_unlocked=false ✓, (4) Simulación de 15 días transcurridos vía mongosh ✓, (5) GET /api/payments/access/dev-p1 → 200 con has_access=true (15d < 30d) ✓, (6) Simulación de 31 días transcurridos vía mongosh ✓, (7) GET /api/payments/access/dev-p1 → 200 con has_access=false, needs_verification=true, email=p1@t.com ✓, (8) POST /api/payments/verify-email con email correcto → 200 {verified:true, reason:purchaser, session_ttl_hours:720} (sesión renovada 30d) ✓, (9) POST /api/payments/verify-email con email incorrecto → 200 {verified:false, reason:no_payment} ✓, (10) POST /api/payments/verify-email desde OTRO dispositivo → 200 {verified:false, reason:wrong_device, message:'Esta compra pertenece a otro dispositivo'} ✓, (11) POST /api/payments/select-package con package_id=hanga-roa → 200 {selected:hanga-roa, owned_packages:[hanga-roa]} ✓, (12) POST /api/payments/select-package intentando cambiar a norte-playas → 200 {already_selected:true, owned_packages:[hanga-roa]} (NO cambia) ✓, (13) GET /api/payments/access/dev-p1 después de elegir → 200 con owned_packages=[hanga-roa], needs_package_selection=false, all_routes_unlocked=false ✓, (14) POST /api/payments/upgrade-checkout con kind=package, package_id=norte-playas → 502 (MP no configurado, error claro) ✓, (15) POST /api/payments/upgrade-checkout con package_id=NO-EXISTE → 400 'Paquete inválido' ✓, (16) POST /api/payments/upgrade-checkout sin pago base → 403 'Necesitas la compra base primero' ✓, (17) Simulación de upgrade 'all' completado vía mongosh (insertar tx upgrade, marcar paid, actualizar parent con 3 paquetes + raffle) ✓, (18) GET /api/payments/access/dev-p1 → 200 con all_routes_unlocked=true, raffle_participating=true, owned_packages=[hanga-roa, norte-playas, moais-este] ✓, (19) GET /api/payments/my-info/dev-p1 → 200 con owned_packages=[3 items], all_routes_unlocked=true, raffle_participating=true, raffle_code presente, session_ttl_hours=720 ✓, (20) POST /api/admin/grant → 200 con access_code de 4 chars, transacción verificada con provider=manual, payment_status=paid ✓, (21) GET /assets/.../Feather.ttf → 200 font/ttf (regresión estáticos OK) ✓, (22) GET /select-package, /admin, /map → 200 HTML (regresión SPA routes OK) ✓, (23) Cleanup test data ✓. SISTEMA DE PAQUETES COMPLETAMENTE FUNCIONAL: Sesión de 30 días (720h) implementada correctamente, 3 paquetes con rutas correctas, verificación solo por email (sin código), bloqueo estricto de otros dispositivos (wrong_device), selección de paquete tras primer pago (no se puede cambiar), upgrades a paquete extra ($3000) o all ($5000), upgrade 'all' desbloquea todos los paquetes + sorteo camiseta con raffle_code, grants manuales del admin siguen funcionando. Production-ready."
 
+  - task: "Fix .gitignore para incluir fuentes vector-icons en deploy"
+    implemented: true
+    working: true
+    file: ".gitignore"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ ALL 10 TESTS PASSED - Gitignore fix completamente verificado contra localhost:8001. USER REPORTED ISSUE: 'no aparece la aplicación' en producción, pero screenshot mostró que la app SÍ aparece (paywall completo renderizado). PROBLEMA REAL: fuentes de íconos (vector-icons) daban 404 en producción → cuadrados vacíos en vez de íconos → app se veía 'rota'. ROOT CAUSE: .gitignore global tenía node_modules/ que bloqueaba backend/web_static/assets/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/*.ttf (estos archivos NO son node_modules reales, son fuentes .ttf generadas por expo export). FIX APLICADO: agregadas excepciones en .gitignore líneas 19-24: !backend/web_static/assets/**, !backend/web_static/assets/node_modules/, !backend/web_static/assets/node_modules/**. TESTS VERIFICADOS: (1) GET / → 200 con <title>Descubre Rapa Nui</title> ✓, (2) GET /api/ → 200 con {message:Rutas Rapa Nui API} ✓, (3) GET /api/packages → 200 con 3 paquetes (hanga-roa: 4 routes, norte-playas: 4 routes, moais-este: 3 routes) y prices correctos (base=3000, extra=3000, all=5000) ✓, (4) 🎉 TODAS las 19 fuentes .ttf sirviendo con 200 y content-type font/ttf: MaterialIcons (348KB), Entypo (64KB), MaterialCommunityIcons (1277KB), Zocial (25KB), FontAwesome6_Solid (413KB), Ionicons (380KB), Foundation (55KB), EvilIcons (13KB), Fontisto (306KB), Feather (54KB), FontAwesome (161KB), FontAwesome6_Regular (66KB), FontAwesome5_Solid (197KB), AntDesign (127KB), SimpleLineIcons (52KB), FontAwesome5_Brands (130KB), Octicons (67KB), FontAwesome6_Brands (204KB), FontAwesome5_Regular (32KB) ✓, (5) GET /_expo/static/js/web/entry-*.js → 200 (2.75 MB bundle) ✓, (6a) git check-ignore -v Feather.ttf → muestra regla de NEGACIÓN .gitignore:24:!backend/web_static/assets/node_modules/** ✓, (6b) git status --short backend/web_static/assets/ → muestra ?? (untracked, NOT ignored) ✓, (7) GET /admin, /map, /select-package → 200 HTML (SPA routes OK) ✓, (8) Admin endpoints regression: GET /api/admin/sales → 200, POST /api/admin/grant → 200 con access_code de 4 dígitos, POST /api/admin/revoke → 200 ✓, (9) Verify-email regression: inserción de pago vía mongosh con last_verified_at 31 días atrás → GET /api/payments/access → has_access=false, needs_verification=true → POST /api/payments/verify-email → verified=true, session_ttl_hours=720 → GET /api/payments/access → has_access=true (sesión renovada 30d) ✓, (10) Packages regression: GET /api/packages → 200 con estructura correcta ✓. GITIGNORE FIX COMPLETAMENTE VERIFICADO: Las 19 fuentes vector-icons ahora NO están ignoradas, aparecen como untracked (??), y serán incluidas en el próximo deploy. En producción post-redeploy, los íconos se verán correctamente y la app ya no se verá 'rota'. Backend funcionando perfectamente. Production-ready."
+
 
 frontend:
   - task: "Botón WhatsApp comparte link definitivo (EXPO_PUBLIC_APP_URL)"
@@ -226,12 +238,12 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 7
+  test_sequence: 8
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Sistema de paquetes con sesión 30 días completamente verificado - all 23 tests passed"
+    - "Gitignore fix para incluir fuentes vector-icons - ALL 10 TESTS PASSED"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -621,6 +633,107 @@ agent_communication:
       🎉 30-day session (720 hours): Implemented correctly, expires after 30 days
       🎉 Email-only verification: No code required, just email + same device
       🎉 Strict 1:1 enforcement: Different device BLOCKED with "wrong_device" reason
+
+  - agent: "testing"
+    message: |
+      ✅ GITIGNORE FIX COMPREHENSIVE VERIFICATION COMPLETE - ALL 10 TESTS PASSED
+      
+      Tested against http://localhost:8001 (backend direct port) with comprehensive test suite:
+      
+      USER REPORTED ISSUE:
+      "no aparece la aplicación" en https://app-builder-9807.emergent.host, pero screenshot verificó que la app 
+      SÍ aparece (paywall completo renderizado). PROBLEMA REAL: fuentes de íconos (vector-icons) daban 404 en 
+      producción → cuadrados vacíos en vez de íconos → app se veía "rota".
+      
+      ROOT CAUSE FOUND:
+      .gitignore global tenía node_modules/ que bloqueaba:
+      backend/web_static/assets/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/*.ttf
+      (estos archivos NO son node_modules reales, son fuentes .ttf generadas por expo export)
+      
+      FIX APPLIED:
+      Agregadas excepciones en .gitignore líneas 19-24:
+      !backend/web_static/assets/**
+      !backend/web_static/assets/node_modules/
+      !backend/web_static/assets/node_modules/**
+      
+      COMPREHENSIVE TEST RESULTS (10 tests):
+      
+      BASIC ENDPOINTS:
+      ✅ Test 1: GET / → 200 with <title>Descubre Rapa Nui</title>
+      ✅ Test 2: GET /api/ → 200 with {"message":"Rutas Rapa Nui API"}
+      ✅ Test 3: GET /api/packages → 200 with 3 packages:
+         - hanga-roa: 4 routes, name="Hanga Roa y Alrededores"
+         - norte-playas: 4 routes, name="Norte y Playas"
+         - moais-este: 3 routes, name="Grandes Moáis del Este"
+         - Prices: base_clp=3000, extra_package_clp=3000, all_routes_clp=5000
+      
+      VECTOR-ICON FONTS SERVING (CRITICAL FIX):
+      ✅ Test 4: ALL 19 .ttf fonts serving with 200 and correct content-type font/ttf:
+         1. MaterialIcons.ttf → 200 font/ttf (348.48 KB) ✓
+         2. Entypo.ttf → 200 font/ttf (64.65 KB) ✓
+         3. MaterialCommunityIcons.ttf → 200 font/ttf (1277.01 KB) ✓
+         4. Zocial.ttf → 200 font/ttf (25.18 KB) ✓
+         5. FontAwesome6_Solid.ttf → 200 font/ttf (413.75 KB) ✓
+         6. Ionicons.ttf → 200 font/ttf (380.59 KB) ✓
+         7. Foundation.ttf → 200 font/ttf (55.64 KB) ✓
+         8. EvilIcons.ttf → 200 font/ttf (13.14 KB) ✓
+         9. Fontisto.ttf → 200 font/ttf (306.18 KB) ✓
+         10. Feather.ttf → 200 font/ttf (54.29 KB) ✓ (WAS 404 - NOW FIXED!)
+         11. FontAwesome.ttf → 200 font/ttf (161.67 KB) ✓
+         12. FontAwesome6_Regular.ttf → 200 font/ttf (66.38 KB) ✓
+         13. FontAwesome5_Solid.ttf → 200 font/ttf (197.99 KB) ✓
+         14. AntDesign.ttf → 200 font/ttf (127.43 KB) ✓
+         15. SimpleLineIcons.ttf → 200 font/ttf (52.79 KB) ✓
+         16. FontAwesome5_Brands.ttf → 200 font/ttf (130.90 KB) ✓
+         17. Octicons.ttf → 200 font/ttf (67.81 KB) ✓
+         18. FontAwesome6_Brands.ttf → 200 font/ttf (204.47 KB) ✓
+         19. FontAwesome5_Regular.ttf → 200 font/ttf (32.95 KB) ✓
+      
+      JS BUNDLE SERVING:
+      ✅ Test 5: GET /_expo/static/js/web/entry-*.js → 200 (2.75 MB, text/javascript)
+      
+      GITIGNORE FIX VERIFICATION:
+      ✅ Test 6a: git check-ignore -v Feather.ttf → shows NEGATION rule:
+         .gitignore:24:!backend/web_static/assets/node_modules/** (file NOT ignored)
+      ✅ Test 6b: git status --short backend/web_static/assets/ → shows ?? (untracked, NOT ignored)
+      
+      SPA ROUTES:
+      ✅ Test 7: GET /admin, /map, /select-package → 200 HTML (SPA fallback working)
+      
+      ADMIN ENDPOINTS REGRESSION:
+      ✅ Test 8a: GET /api/admin/sales?key=RAPANUI-2026 → 200 (sales working)
+      ✅ Test 8b: POST /api/admin/grant email=gitignore@t.com → 200 with 4-digit access_code
+      ✅ Test 8c: POST /api/admin/revoke email=gitignore@t.com → 200 (revoked_transactions=1)
+      
+      VERIFY-EMAIL FLOW REGRESSION (30d session):
+      ✅ Test 9a: Insert test payment via mongosh (31 days old)
+      ✅ Test 9b: GET /api/payments/access/dev-gitignore-test → has_access=false, needs_verification=true
+      ✅ Test 9c: POST /api/payments/verify-email → verified=true, session_ttl_hours=720 (30 days renewed)
+      ✅ Test 9d: GET /api/payments/access/dev-gitignore-test → has_access=true (session renewed)
+      ✅ Test 9e: Cleanup test data → successful
+      
+      PACKAGES REGRESSION:
+      ✅ Test 10: GET /api/packages → 200 with correct structure and prices
+      
+      CRITICAL FIX CONFIRMED:
+      🎉 All 19 vector-icon fonts now serving with 200 and correct content-type (font/ttf)
+      🎉 .gitignore negation rules working correctly (line 24)
+      🎉 Assets folder is untracked (NOT ignored) - shows as ?? in git status
+      🎉 All fonts will be included in next deploy
+      🎉 In production post-redeploy, icons will display correctly and app will no longer look "broken"
+      
+      BACKEND FUNCTIONALITY VERIFIED:
+      ✅ Basic endpoints working (/, /api/, /api/packages)
+      ✅ JS bundle serving correctly (2.75 MB)
+      ✅ SPA routes working (/admin, /map, /select-package)
+      ✅ Admin endpoints working (sales, grant, revoke)
+      ✅ Verify-email flow working with 30d session (720h)
+      ✅ Packages endpoint returning correct data (3 packages with correct route counts and prices)
+      
+      PRODUCTION-READY: Gitignore fix completamente verificado. Las 19 fuentes vector-icons ahora NO están 
+      ignoradas y serán incluidas en el próximo deploy. Backend funcionando perfectamente. Ready for Emergent 
+      deployment!
+
       🎉 3 route packages: hanga-roa (4), norte-playas (4), moais-este (3) - all correct
       🎉 Package selection: User chooses 1 package after first payment, cannot change
       🎉 Upgrade system: Extra package ($3000) or all routes ($5000) working

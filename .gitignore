@@ -16,6 +16,13 @@ node_modules/
 !.yarn/releases
 !.yarn/versions
 
+# EXCEPCIÓN: los assets del build web de Expo (fuentes de vector-icons)
+# viven bajo backend/web_static/assets/node_modules/. NO son node_modules
+# reales, son archivos de fuentes .ttf que necesitamos incluir en el deploy.
+!backend/web_static/assets/**
+!backend/web_static/assets/node_modules/
+!backend/web_static/assets/node_modules/**
+
 # Testing
 /coverage
 

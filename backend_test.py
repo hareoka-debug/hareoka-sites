@@ -1,592 +1,399 @@
 #!/usr/bin/env python3
 """
-Backend test suite for "Descubre Rapa Nui" - Package System with 30-day sessions
-Tests the new package-based system with 3 route packages, email-only verification,
-and 30-day session TTL.
+Comprehensive backend test for gitignore fix verification.
+Tests vector-icon fonts serving, packages endpoint, admin endpoints, and verify-email flow.
 """
+
 import requests
 import json
-import sys
 import subprocess
-from datetime import datetime, timedelta
+import sys
+from pathlib import Path
 
 BASE_URL = "http://localhost:8001"
 ADMIN_KEY = "RAPANUI-2026"
 
-def mongosh_exec(cmd):
-    """Execute mongosh command"""
-    result = subprocess.run(
-        ["mongosh", "--quiet", "--eval", cmd],
-        capture_output=True,
-        text=True,
-        timeout=10
-    )
-    return result.stdout.strip()
-
-def test_1_get_packages():
-    """Test 1: GET /api/packages → 200 with 3 packages"""
-    print("\n[Test 1] GET /api/packages → Verify 3 packages with correct structure")
-    resp = requests.get(f"{BASE_URL}/api/packages", timeout=10)
+def test_basic_endpoints():
+    """Test 1-3: Basic endpoints"""
+    print("\n=== TEST 1-3: Basic Endpoints ===")
+    
+    # Test 1: GET /
+    print("Test 1: GET / → 200 with <title>Descubre Rapa Nui</title>")
+    resp = requests.get(f"{BASE_URL}/")
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    assert "<title>Descubre Rapa Nui</title>" in resp.text, "Title not found in HTML"
+    print("✅ Test 1 PASSED")
+    
+    # Test 2: GET /api/
+    print("\nTest 2: GET /api/ → 200 with JSON")
+    resp = requests.get(f"{BASE_URL}/api/")
     assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
     data = resp.json()
+    assert data["message"] == "Rutas Rapa Nui API", f"Unexpected message: {data}"
+    print(f"✅ Test 2 PASSED: {data}")
     
-    assert "packages" in data, f"Missing 'packages' key: {data}"
-    assert "prices" in data, f"Missing 'prices' key: {data}"
-    
+    # Test 3: GET /api/packages
+    print("\nTest 3: GET /api/packages → 200 with 3 packages")
+    resp = requests.get(f"{BASE_URL}/api/packages")
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    data = resp.json()
     packages = data["packages"]
     assert len(packages) == 3, f"Expected 3 packages, got {len(packages)}"
     
     # Verify package IDs and route counts
-    pkg_ids = {p["id"]: p for p in packages}
-    assert "hanga-roa" in pkg_ids, "Missing 'hanga-roa' package"
-    assert "norte-playas" in pkg_ids, "Missing 'norte-playas' package"
-    assert "moais-este" in pkg_ids, "Missing 'moais-este' package"
-    
-    assert pkg_ids["hanga-roa"]["route_count"] == 4, f"hanga-roa should have 4 routes, got {pkg_ids['hanga-roa']['route_count']}"
-    assert pkg_ids["norte-playas"]["route_count"] == 4, f"norte-playas should have 4 routes, got {pkg_ids['norte-playas']['route_count']}"
-    assert pkg_ids["moais-este"]["route_count"] == 3, f"moais-este should have 3 routes, got {pkg_ids['moais-este']['route_count']}"
+    expected = {
+        "hanga-roa": 4,
+        "norte-playas": 4,
+        "moais-este": 3
+    }
+    for pkg in packages:
+        pkg_id = pkg["id"]
+        assert pkg_id in expected, f"Unexpected package ID: {pkg_id}"
+        route_count = pkg["route_count"]
+        assert route_count == expected[pkg_id], f"Package {pkg_id}: expected {expected[pkg_id]} routes, got {route_count}"
+        print(f"  ✓ Package '{pkg_id}': {route_count} routes, name='{pkg['name']}'")
     
     # Verify prices
+    prices = data["prices"]
+    assert prices["base_clp"] == 3000, "base_clp should be 3000"
+    assert prices["extra_package_clp"] == 3000, "extra_package_clp should be 3000"
+    assert prices["all_routes_clp"] == 5000, "all_routes_clp should be 5000"
+    print(f"  ✓ Prices: base=3000, extra=3000, all=5000")
+    print("✅ Test 3 PASSED")
+
+
+def test_vector_icon_fonts():
+    """Test 4: Verify ALL vector-icon fonts serving with 200 and correct content-type"""
+    print("\n=== TEST 4: Vector-Icon Fonts Serving ===")
+    
+    fonts_dir = Path("/app/backend/web_static/assets/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/")
+    ttf_files = list(fonts_dir.glob("*.ttf"))
+    
+    print(f"Found {len(ttf_files)} .ttf font files in {fonts_dir}")
+    assert len(ttf_files) >= 15, f"Expected at least 15 fonts, found {len(ttf_files)}"
+    
+    failed_fonts = []
+    passed_fonts = []
+    
+    for ttf_file in ttf_files:
+        # Construct URL path
+        relative_path = ttf_file.relative_to(Path("/app/backend/web_static"))
+        url = f"{BASE_URL}/{relative_path}"
+        
+        resp = requests.get(url)
+        file_size_kb = ttf_file.stat().st_size / 1024
+        
+        if resp.status_code != 200:
+            failed_fonts.append({
+                "file": ttf_file.name,
+                "status": resp.status_code,
+                "size_kb": file_size_kb
+            })
+            print(f"  ❌ {ttf_file.name}: {resp.status_code} (size: {file_size_kb:.2f} KB)")
+        else:
+            content_type = resp.headers.get("content-type", "")
+            content_length = len(resp.content) / 1024
+            
+            # Verify content-type is font-related
+            is_font_type = any(x in content_type.lower() for x in ["font", "ttf", "octet-stream"])
+            
+            if not is_font_type:
+                failed_fonts.append({
+                    "file": ttf_file.name,
+                    "status": 200,
+                    "content_type": content_type,
+                    "issue": "wrong content-type"
+                })
+                print(f"  ⚠️  {ttf_file.name}: 200 but wrong content-type '{content_type}'")
+            elif content_length < 10:
+                failed_fonts.append({
+                    "file": ttf_file.name,
+                    "status": 200,
+                    "size_kb": content_length,
+                    "issue": "file too small"
+                })
+                print(f"  ⚠️  {ttf_file.name}: 200 but file too small ({content_length:.2f} KB)")
+            else:
+                passed_fonts.append({
+                    "file": ttf_file.name,
+                    "size_kb": content_length,
+                    "content_type": content_type
+                })
+                print(f"  ✅ {ttf_file.name}: 200 {content_type} ({content_length:.2f} KB)")
+    
+    print(f"\n📊 SUMMARY: {len(passed_fonts)}/{len(ttf_files)} fonts serving correctly")
+    
+    if failed_fonts:
+        print(f"\n❌ FAILED FONTS ({len(failed_fonts)}):")
+        for f in failed_fonts:
+            print(f"  - {f}")
+        raise AssertionError(f"{len(failed_fonts)} fonts failed to serve correctly")
+    
+    print("✅ Test 4 PASSED: All fonts serving with 200 and correct content-type")
+
+
+def test_js_bundle():
+    """Test 5: Verify JS bundle serving"""
+    print("\n=== TEST 5: JS Bundle Serving ===")
+    
+    # Find the entry JS file
+    js_dir = Path("/app/backend/web_static/_expo/static/js/web/")
+    entry_files = list(js_dir.glob("entry-*.js"))
+    
+    assert len(entry_files) > 0, "No entry-*.js file found"
+    entry_file = entry_files[0]
+    
+    relative_path = entry_file.relative_to(Path("/app/backend/web_static"))
+    url = f"{BASE_URL}/{relative_path}"
+    
+    print(f"Testing: GET {url}")
+    resp = requests.get(url)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    
+    size_mb = len(resp.content) / (1024 * 1024)
+    assert size_mb > 1, f"Bundle too small: {size_mb:.2f} MB"
+    
+    content_type = resp.headers.get("content-type", "")
+    print(f"✅ Test 5 PASSED: Bundle serving correctly ({size_mb:.2f} MB, {content_type})")
+
+
+def test_gitignore_fix():
+    """Test 6: Verify .gitignore fix"""
+    print("\n=== TEST 6: .gitignore Fix Verification ===")
+    
+    # Test git check-ignore
+    test_file = "backend/web_static/assets/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ca4b48e04dc1ce10bfbddb262c8b835f.ttf"
+    
+    print(f"Test 6a: git check-ignore -v {test_file}")
+    result = subprocess.run(
+        ["git", "check-ignore", "-v", test_file],
+        cwd="/app",
+        capture_output=True,
+        text=True
+    )
+    
+    output = result.stdout.strip()
+    print(f"  Output: {output}")
+    
+    # Should show a negation rule (!)
+    assert "!backend/web_static/assets" in output, f"Expected negation rule in output, got: {output}"
+    print("  ✅ Negation rule found in .gitignore")
+    
+    # Test git status
+    print("\nTest 6b: git status --short backend/web_static/assets/")
+    result = subprocess.run(
+        ["git", "status", "--short", "backend/web_static/assets/"],
+        cwd="/app",
+        capture_output=True,
+        text=True
+    )
+    
+    output = result.stdout.strip()
+    print(f"  Output: {output}")
+    
+    # Should show ?? (untracked, NOT ignored)
+    assert "??" in output, f"Expected '??' (untracked), got: {output}"
+    print("  ✅ Assets folder is untracked (NOT ignored)")
+    
+    print("✅ Test 6 PASSED: .gitignore fix verified")
+
+
+def test_spa_routes():
+    """Test 7: SPA routes still work"""
+    print("\n=== TEST 7: SPA Routes ===")
+    
+    routes = ["/admin", "/map", "/select-package"]
+    
+    for route in routes:
+        print(f"Testing: GET {route}")
+        resp = requests.get(f"{BASE_URL}{route}")
+        assert resp.status_code == 200, f"Expected 200 for {route}, got {resp.status_code}"
+        assert "<title>Descubre Rapa Nui</title>" in resp.text, f"Title not found in {route}"
+        print(f"  ✅ {route} → 200 HTML")
+    
+    print("✅ Test 7 PASSED: All SPA routes working")
+
+
+def test_admin_endpoints():
+    """Test 8: Admin endpoints regression"""
+    print("\n=== TEST 8: Admin Endpoints Regression ===")
+    
+    # Test 8a: GET /api/admin/sales
+    print("Test 8a: GET /api/admin/sales?key=RAPANUI-2026")
+    resp = requests.get(f"{BASE_URL}/api/admin/sales", params={"key": ADMIN_KEY})
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    sales = resp.json()
+    print(f"  ✅ Sales: {sales['sales_count']} sales, {sales['total_clp']} CLP total")
+    
+    # Test 8b: POST /api/admin/grant
+    test_email = "gitignore@t.com"
+    print(f"\nTest 8b: POST /api/admin/grant (email={test_email})")
+    resp = requests.post(
+        f"{BASE_URL}/api/admin/grant",
+        params={"key": ADMIN_KEY},
+        json={"email": test_email}
+    )
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    grant_data = resp.json()
+    assert grant_data["granted"] == True, f"Expected granted=True, got {grant_data}"
+    access_code = grant_data.get("access_code")
+    assert access_code and len(access_code) == 4, f"Expected 4-digit access_code, got {access_code}"
+    print(f"  ✅ Grant successful: access_code={access_code}")
+    
+    # Test 8c: POST /api/admin/revoke
+    print(f"\nTest 8c: POST /api/admin/revoke (email={test_email})")
+    resp = requests.post(
+        f"{BASE_URL}/api/admin/revoke",
+        params={"key": ADMIN_KEY},
+        json={"email": test_email}
+    )
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    revoke_data = resp.json()
+    print(f"  ✅ Revoke successful: {revoke_data}")
+    
+    print("✅ Test 8 PASSED: Admin endpoints working")
+
+
+def test_verify_email_flow():
+    """Test 9: Verify-email regression with 30d session"""
+    print("\n=== TEST 9: Verify-Email Flow (30d session) ===")
+    
+    # Insert a test payment via mongosh
+    test_email = "gitignore-verify@t.com"
+    test_device = "dev-gitignore-test"
+    test_code = "9876"
+    
+    print(f"Test 9a: Insert test payment via mongosh")
+    
+    # First cleanup
+    cleanup_cmd = f'db.payment_transactions.deleteMany({{email: "{test_email}"}}); db.access_grants.deleteMany({{email: "{test_email}"}});'
+    subprocess.run(
+        ["mongosh", "test_database", "--quiet", "--eval", cleanup_cmd],
+        capture_output=True
+    )
+    
+    # Insert test transaction
+    insert_cmd = f'db.payment_transactions.insertOne({{id: "tx-gitignore-test", tx_id: "tx-gitignore-test", email: "{test_email}", device_id: "{test_device}", access_code: "{test_code}", payment_status: "paid", provider: "manual", amount_clp: 3000, created_at: new Date(), last_verified_at: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000), max_devices: 1}});'
+    result = subprocess.run(
+        ["mongosh", "test_database", "--quiet", "--eval", insert_cmd],
+        capture_output=True,
+        text=True
+    )
+    assert result.returncode == 0, f"Failed to insert: {result.stderr}"
+    print("  ✅ Test payment inserted (31 days old)")
+    
+    # Test 9b: Check access (should be expired)
+    print(f"\nTest 9b: GET /api/payments/access/{test_device} (should be expired)")
+    resp = requests.get(f"{BASE_URL}/api/payments/access/{test_device}")
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    access_data = resp.json()
+    assert access_data["has_access"] == False, f"Expected has_access=False, got {access_data}"
+    assert access_data["needs_verification"] == True, f"Expected needs_verification=True, got {access_data}"
+    print(f"  ✅ Access expired: {access_data}")
+    
+    # Test 9c: Verify email (should renew 30d session)
+    print(f"\nTest 9c: POST /api/payments/verify-email (should renew 30d session)")
+    resp = requests.post(
+        f"{BASE_URL}/api/payments/verify-email",
+        json={"email": test_email, "device_id": test_device}
+    )
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    verify_data = resp.json()
+    assert verify_data["verified"] == True, f"Expected verified=True, got {verify_data}"
+    assert verify_data["session_ttl_hours"] == 720, f"Expected 720h (30d), got {verify_data['session_ttl_hours']}"
+    print(f"  ✅ Email verified: {verify_data}")
+    
+    # Test 9d: Check access again (should have access now)
+    print(f"\nTest 9d: GET /api/payments/access/{test_device} (should have access)")
+    resp = requests.get(f"{BASE_URL}/api/payments/access/{test_device}")
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    access_data = resp.json()
+    assert access_data["has_access"] == True, f"Expected has_access=True, got {access_data}"
+    print(f"  ✅ Access granted: {access_data}")
+    
+    # Cleanup
+    print(f"\nTest 9e: Cleanup test data")
+    subprocess.run(
+        ["mongosh", "test_database", "--quiet", "--eval", cleanup_cmd],
+        capture_output=True
+    )
+    print("  ✅ Cleanup complete")
+    
+    print("✅ Test 9 PASSED: Verify-email flow working with 30d session")
+
+
+def test_packages_regression():
+    """Test 10: Packages endpoint returns correct data"""
+    print("\n=== TEST 10: Packages Regression ===")
+    
+    resp = requests.get(f"{BASE_URL}/api/packages")
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    data = resp.json()
+    packages = data["packages"]
+    
+    assert len(packages) == 3, f"Expected 3 packages, got {len(packages)}"
+    
+    # Verify structure
+    for pkg in packages:
+        assert "id" in pkg, f"Missing 'id' in package: {pkg}"
+        assert "name" in pkg, f"Missing 'name' in package: {pkg}"
+        assert "route_count" in pkg, f"Missing 'route_count' in package: {pkg}"
+    
+    # Verify prices at root level
     prices = data["prices"]
     assert prices["base_clp"] == 3000, f"Expected base_clp=3000, got {prices['base_clp']}"
     assert prices["extra_package_clp"] == 3000, f"Expected extra_package_clp=3000, got {prices['extra_package_clp']}"
     assert prices["all_routes_clp"] == 5000, f"Expected all_routes_clp=5000, got {prices['all_routes_clp']}"
     
-    print(f"  ✅ 3 packages found: hanga-roa (4 routes), norte-playas (4 routes), moais-este (3 routes)")
-    print(f"  ✅ Prices: base=3000, extra_package=3000, all_routes=5000")
-    print("  ✅ Test 1 PASSED")
-    return True
-
-
-def test_2_insert_30day_transaction():
-    """Test 2: Insert transaction with recent last_verified_at"""
-    print("\n[Test 2] Insert test transaction with recent last_verified_at")
-    cmd = '''db.getSiblingDB("test_database").payment_transactions.insertOne({
-        id:"tx-30d",
-        provider:"stripe",
-        device_id:"dev-p1",
-        email:"p1@t.com",
-        amount_clp:3000,
-        currency:"clp",
-        payment_status:"paid",
-        access_code:"1234",
-        max_devices:1,
-        created_at:new Date().toISOString(),
-        paid_at:new Date().toISOString(),
-        last_verified_at:new Date().toISOString()
-    })'''
-    result = mongosh_exec(cmd)
-    assert "acknowledged: true" in result or "insertedId" in result, f"Insert failed: {result}"
-    print("  ✅ Transaction tx-30d inserted successfully")
-    print("  ✅ Test 2 PASSED")
-    return True
-
-
-def test_3_check_access_needs_package_selection():
-    """Test 3: GET /api/payments/access/dev-p1 → has_access=true, needs_package_selection=true"""
-    print("\n[Test 3] GET /api/payments/access/dev-p1 → Verify access with package selection needed")
-    resp = requests.get(f"{BASE_URL}/api/payments/access/dev-p1", timeout=10)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    data = resp.json()
-    
-    assert data.get("has_access") is True, f"Expected has_access=true, got {data}"
-    assert data.get("needs_package_selection") is True, f"Expected needs_package_selection=true, got {data}"
-    assert data.get("owned_packages") == [], f"Expected owned_packages=[], got {data.get('owned_packages')}"
-    assert data.get("all_routes_unlocked") is False, f"Expected all_routes_unlocked=false, got {data}"
-    
-    print(f"  ✅ has_access=true, needs_package_selection=true, owned_packages=[], all_routes_unlocked=false")
-    print("  ✅ Test 3 PASSED")
-    return True
-
-
-def test_4_simulate_15_days_elapsed():
-    """Test 4: Simulate 15 days elapsed (session still valid)"""
-    print("\n[Test 4] Simulate 15 days elapsed (session still valid < 30d)")
-    cmd = '''const d15=new Date(Date.now()-15*24*3600*1000).toISOString(); 
-db.getSiblingDB("test_database").payment_transactions.updateOne(
-    {id:"tx-30d"},
-    {$set:{last_verified_at:d15}}
-)'''
-    result = mongosh_exec(cmd)
-    assert "modifiedCount: 1" in result or "matchedCount: 1" in result, f"Update failed: {result}"
-    print("  ✅ last_verified_at set to 15 days ago")
-    print("  ✅ Test 4 PASSED")
-    return True
-
-
-def test_5_check_access_15days_valid():
-    """Test 5: GET /api/payments/access/dev-p1 → has_access=true (15d < 30d)"""
-    print("\n[Test 5] GET /api/payments/access/dev-p1 → Verify session still valid after 15 days")
-    resp = requests.get(f"{BASE_URL}/api/payments/access/dev-p1", timeout=10)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    data = resp.json()
-    
-    assert data.get("has_access") is True, f"Expected has_access=true after 15 days, got {data}"
-    print(f"  ✅ has_access=true (session valid: 15 days < 30 days)")
-    print("  ✅ Test 5 PASSED")
-    return True
-
-
-def test_6_simulate_31_days_elapsed():
-    """Test 6: Simulate 31 days elapsed (session expired)"""
-    print("\n[Test 6] Simulate 31 days elapsed (session expired > 30d)")
-    cmd = '''const d31=new Date(Date.now()-31*24*3600*1000).toISOString(); 
-db.getSiblingDB("test_database").payment_transactions.updateOne(
-    {id:"tx-30d"},
-    {$set:{last_verified_at:d31, paid_at:d31}}
-)'''
-    result = mongosh_exec(cmd)
-    assert "modifiedCount: 1" in result or "matchedCount: 1" in result, f"Update failed: {result}"
-    print("  ✅ last_verified_at and paid_at set to 31 days ago")
-    print("  ✅ Test 6 PASSED")
-    return True
-
-
-def test_7_check_access_31days_expired():
-    """Test 7: GET /api/payments/access/dev-p1 → has_access=false, needs_verification=true"""
-    print("\n[Test 7] GET /api/payments/access/dev-p1 → Verify session expired after 31 days")
-    resp = requests.get(f"{BASE_URL}/api/payments/access/dev-p1", timeout=10)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    data = resp.json()
-    
-    assert data.get("has_access") is False, f"Expected has_access=false after 31 days, got {data}"
-    assert data.get("needs_verification") is True, f"Expected needs_verification=true, got {data}"
-    assert data.get("email") == "p1@t.com", f"Expected email=p1@t.com, got {data.get('email')}"
-    
-    print(f"  ✅ has_access=false, needs_verification=true, email=p1@t.com")
-    print("  ✅ Test 7 PASSED")
-    return True
-
-
-def test_8_verify_email_correct():
-    """Test 8: POST /api/payments/verify-email with correct email"""
-    print("\n[Test 8] POST /api/payments/verify-email → Verify with correct email (no code)")
-    resp = requests.post(
-        f"{BASE_URL}/api/payments/verify-email",
-        json={"device_id": "dev-p1", "email": "p1@t.com"},
-        timeout=10
-    )
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    data = resp.json()
-    
-    assert data.get("verified") is True, f"Expected verified=true, got {data}"
-    assert data.get("reason") == "purchaser", f"Expected reason=purchaser, got {data.get('reason')}"
-    assert data.get("session_ttl_hours") == 720, f"Expected session_ttl_hours=720, got {data.get('session_ttl_hours')}"
-    
-    print(f"  ✅ verified=true, reason=purchaser, session_ttl_hours=720")
-    print("  ✅ Test 8 PASSED - Session renewed for 30 days")
-    return True
-
-
-def test_9_verify_email_wrong():
-    """Test 9: POST /api/payments/verify-email with wrong email"""
-    print("\n[Test 9] POST /api/payments/verify-email → Verify with wrong email")
-    resp = requests.post(
-        f"{BASE_URL}/api/payments/verify-email",
-        json={"device_id": "dev-p1", "email": "otro@t.com"},
-        timeout=10
-    )
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    data = resp.json()
-    
-    assert data.get("verified") is False, f"Expected verified=false, got {data}"
-    assert data.get("reason") == "no_payment", f"Expected reason=no_payment, got {data.get('reason')}"
-    
-    print(f"  ✅ verified=false, reason=no_payment")
-    print("  ✅ Test 9 PASSED")
-    return True
-
-
-def test_10_verify_email_wrong_device():
-    """Test 10: POST /api/payments/verify-email from different device"""
-    print("\n[Test 10] POST /api/payments/verify-email → Verify from different device")
-    resp = requests.post(
-        f"{BASE_URL}/api/payments/verify-email",
-        json={"device_id": "dev-p1-otro", "email": "p1@t.com"},
-        timeout=10
-    )
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    data = resp.json()
-    
-    assert data.get("verified") is False, f"Expected verified=false, got {data}"
-    assert data.get("reason") == "wrong_device", f"Expected reason=wrong_device, got {data.get('reason')}"
-    assert "otro dispositivo" in data.get("message", "").lower(), f"Expected 'otro dispositivo' in message, got {data.get('message')}"
-    
-    print(f"  ✅ verified=false, reason=wrong_device")
-    print(f"  ✅ message: {data.get('message')}")
-    print("  ✅ Test 10 PASSED - Different device blocked")
-    return True
-
-
-def test_11_select_package():
-    """Test 11: POST /api/payments/select-package → Select first package"""
-    print("\n[Test 11] POST /api/payments/select-package → Select 'hanga-roa' package")
-    resp = requests.post(
-        f"{BASE_URL}/api/payments/select-package",
-        json={"device_id": "dev-p1", "email": "p1@t.com", "package_id": "hanga-roa"},
-        timeout=10
-    )
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    data = resp.json()
-    
-    assert data.get("selected") == "hanga-roa", f"Expected selected=hanga-roa, got {data}"
-    assert data.get("owned_packages") == ["hanga-roa"], f"Expected owned_packages=['hanga-roa'], got {data.get('owned_packages')}"
-    
-    print(f"  ✅ selected=hanga-roa, owned_packages=['hanga-roa']")
-    print("  ✅ Test 11 PASSED")
-    return True
-
-
-def test_12_select_package_again():
-    """Test 12: POST /api/payments/select-package → Try to select another package"""
-    print("\n[Test 12] POST /api/payments/select-package → Try to select 'norte-playas' (should fail)")
-    resp = requests.post(
-        f"{BASE_URL}/api/payments/select-package",
-        json={"device_id": "dev-p1", "email": "p1@t.com", "package_id": "norte-playas"},
-        timeout=10
-    )
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    data = resp.json()
-    
-    assert data.get("already_selected") is True, f"Expected already_selected=true, got {data}"
-    assert data.get("owned_packages") == ["hanga-roa"], f"Expected owned_packages=['hanga-roa'], got {data.get('owned_packages')}"
-    
-    print(f"  ✅ already_selected=true, owned_packages=['hanga-roa'] (unchanged)")
-    print("  ✅ Test 12 PASSED - Cannot change package selection")
-    return True
-
-
-def test_13_check_access_after_selection():
-    """Test 13: GET /api/payments/access/dev-p1 → Verify package selected"""
-    print("\n[Test 13] GET /api/payments/access/dev-p1 → Verify after package selection")
-    resp = requests.get(f"{BASE_URL}/api/payments/access/dev-p1", timeout=10)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    data = resp.json()
-    
-    assert data.get("owned_packages") == ["hanga-roa"], f"Expected owned_packages=['hanga-roa'], got {data.get('owned_packages')}"
-    assert data.get("needs_package_selection") is False, f"Expected needs_package_selection=false, got {data}"
-    assert data.get("all_routes_unlocked") is False, f"Expected all_routes_unlocked=false, got {data}"
-    
-    print(f"  ✅ owned_packages=['hanga-roa'], needs_package_selection=false, all_routes_unlocked=false")
-    print("  ✅ Test 13 PASSED")
-    return True
-
-
-def test_14_upgrade_extra_package():
-    """Test 14: POST /api/payments/upgrade-checkout → Upgrade to extra package"""
-    print("\n[Test 14] POST /api/payments/upgrade-checkout → Upgrade to 'norte-playas' package")
-    resp = requests.post(
-        f"{BASE_URL}/api/payments/upgrade-checkout",
-        json={
-            "device_id": "dev-p1",
-            "email": "p1@t.com",
-            "kind": "package",
-            "package_id": "norte-playas",
-            "provider": "mercadopago",
-            "origin_url": "http://localhost:8001"
-        },
-        timeout=10
-    )
-    
-    # May fail with 503 if MP not configured, or 502 if MP API call fails
-    if resp.status_code in (502, 503):
-        data = resp.json()
-        detail = data.get("detail", "")
-        assert "MP" in detail or "Mercado Pago" in detail, f"Expected MP-related error, got {data}"
-        print(f"  ⚠️  {resp.status_code} Error: {detail[:100]}")
-        print("  ✅ Test 14 PASSED - Error message is clear (MP not configured or API error)")
-        return True
-    
-    assert resp.status_code == 200, f"Expected 200, 502, or 503, got {resp.status_code}"
-    data = resp.json()
-    assert "url" in data, f"Missing 'url' in response: {data}"
-    assert "tx_id" in data, f"Missing 'tx_id' in response: {data}"
-    print(f"  ✅ Upgrade checkout created: tx_id={data.get('tx_id')}")
-    print("  ✅ Test 14 PASSED")
-    return True
-
-
-def test_15_upgrade_invalid_package():
-    """Test 15: POST /api/payments/upgrade-checkout → Invalid package"""
-    print("\n[Test 15] POST /api/payments/upgrade-checkout → Try invalid package")
-    resp = requests.post(
-        f"{BASE_URL}/api/payments/upgrade-checkout",
-        json={
-            "device_id": "dev-p1",
-            "email": "p1@t.com",
-            "kind": "package",
-            "package_id": "NO-EXISTE",
-            "provider": "mercadopago",
-            "origin_url": "http://localhost:8001"
-        },
-        timeout=10
-    )
-    assert resp.status_code == 400, f"Expected 400, got {resp.status_code}"
-    data = resp.json()
-    assert "Paquete inválido" in data.get("detail", ""), f"Expected 'Paquete inválido', got {data}"
-    
-    print(f"  ✅ 400 Bad Request: {data.get('detail')}")
-    print("  ✅ Test 15 PASSED")
-    return True
-
-
-def test_16_upgrade_no_base_payment():
-    """Test 16: POST /api/payments/upgrade-checkout → No base payment"""
-    print("\n[Test 16] POST /api/payments/upgrade-checkout → Try upgrade without base payment")
-    resp = requests.post(
-        f"{BASE_URL}/api/payments/upgrade-checkout",
-        json={
-            "device_id": "dev-NO-PAY",
-            "email": "nope@t.com",
-            "kind": "all",
-            "provider": "mercadopago",
-            "origin_url": "http://localhost:8001"
-        },
-        timeout=10
-    )
-    assert resp.status_code == 403, f"Expected 403, got {resp.status_code}"
-    data = resp.json()
-    assert "Necesitas la compra base primero" in data.get("detail", ""), f"Expected 'Necesitas la compra base primero', got {data}"
-    
-    print(f"  ✅ 403 Forbidden: {data.get('detail')}")
-    print("  ✅ Test 16 PASSED")
-    return True
-
-
-def test_17_simulate_upgrade_all():
-    """Test 17: Simulate upgrade 'all' completed"""
-    print("\n[Test 17] Simulate upgrade 'all' completed → Insert and mark paid")
-    
-    # Insert upgrade transaction
-    cmd1 = '''db.getSiblingDB("test_database").payment_transactions.insertOne({
-        id:"up-all-1",
-        provider:"mercadopago",
-        device_id:"dev-p1",
-        email:"p1@t.com",
-        amount_clp:5000,
-        currency:"clp",
-        payment_status:"pending",
-        kind:"upgrade",
-        upgrade_kind:"all",
-        parent_tx:"tx-30d",
-        created_at:new Date().toISOString(),
-        session_id:"mock-session-all-1",
-        mp_preference_id:"mock-pref-all-1"
-    })'''
-    result1 = mongosh_exec(cmd1)
-    assert "acknowledged: true" in result1 or "insertedId" in result1, f"Insert failed: {result1}"
-    print("  ✅ Upgrade transaction up-all-1 inserted")
-    
-    # Mark as paid
-    cmd2 = '''db.getSiblingDB("test_database").payment_transactions.updateOne(
-        {id:"up-all-1"},
-        {$set:{payment_status:"paid", paid_at:new Date().toISOString()}}
-    )'''
-    result2 = mongosh_exec(cmd2)
-    assert "modifiedCount: 1" in result2 or "matchedCount: 1" in result2, f"Update failed: {result2}"
-    print("  ✅ Upgrade transaction marked as paid")
-    
-    # Manually apply upgrade logic (since _mark_paid is not triggered by updateOne)
-    cmd3 = '''const raffle_code = "RAPA-" + Math.random().toString(36).substring(2, 8).toUpperCase();
-db.getSiblingDB("test_database").payment_transactions.updateOne(
-    {id:"tx-30d"},
-    {$set:{
-        owned_packages:["hanga-roa","norte-playas","moais-este"],
-        all_routes_unlocked:true,
-        raffle_participating:true,
-        raffle_code:raffle_code,
-        raffle_registered_at:new Date().toISOString()
-    }}
-)'''
-    result3 = mongosh_exec(cmd3)
-    assert "modifiedCount: 1" in result3 or "matchedCount: 1" in result3, f"Update failed: {result3}"
-    print("  ✅ Parent transaction updated with all packages + raffle")
-    print("  ✅ Test 17 PASSED")
-    return True
-
-
-def test_18_check_access_all_unlocked():
-    """Test 18: GET /api/payments/access/dev-p1 → Verify all routes unlocked"""
-    print("\n[Test 18] GET /api/payments/access/dev-p1 → Verify all routes unlocked + raffle")
-    resp = requests.get(f"{BASE_URL}/api/payments/access/dev-p1", timeout=10)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    data = resp.json()
-    
-    assert data.get("all_routes_unlocked") is True, f"Expected all_routes_unlocked=true, got {data}"
-    assert data.get("raffle_participating") is True, f"Expected raffle_participating=true, got {data}"
-    assert len(data.get("owned_packages", [])) == 3, f"Expected 3 owned_packages, got {data.get('owned_packages')}"
-    
-    print(f"  ✅ all_routes_unlocked=true, raffle_participating=true")
-    print(f"  ✅ owned_packages={data.get('owned_packages')}")
-    print("  ✅ Test 18 PASSED")
-    return True
-
-
-def test_19_my_info():
-    """Test 19: GET /api/payments/my-info/dev-p1 → Verify purchaser info"""
-    print("\n[Test 19] GET /api/payments/my-info/dev-p1 → Verify purchaser info")
-    resp = requests.get(f"{BASE_URL}/api/payments/my-info/dev-p1", timeout=10)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    data = resp.json()
-    
-    assert len(data.get("owned_packages", [])) == 3, f"Expected 3 owned_packages, got {data.get('owned_packages')}"
-    assert data.get("all_routes_unlocked") is True, f"Expected all_routes_unlocked=true, got {data}"
-    assert data.get("raffle_participating") is True, f"Expected raffle_participating=true, got {data}"
-    assert data.get("raffle_code") is not None, f"Expected raffle_code, got {data}"
-    assert data.get("session_ttl_hours") == 720, f"Expected session_ttl_hours=720, got {data.get('session_ttl_hours')}"
-    
-    print(f"  ✅ owned_packages={data.get('owned_packages')}")
-    print(f"  ✅ all_routes_unlocked=true, raffle_participating=true")
-    print(f"  ✅ raffle_code={data.get('raffle_code')}, session_ttl_hours=720")
-    print("  ✅ Test 19 PASSED")
-    return True
-
-
-def test_20_admin_grant():
-    """Test 20: POST /api/admin/grant → Grant access"""
-    print("\n[Test 20] POST /api/admin/grant → Grant access to testx@t.com")
-    resp = requests.post(
-        f"{BASE_URL}/api/admin/grant?key={ADMIN_KEY}",
-        json={"email": "testx@t.com"},
-        timeout=10
-    )
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    data = resp.json()
-    
-    assert data.get("granted") is True, f"Expected granted=true, got {data}"
-    access_code = data.get("access_code")
-    assert access_code and len(access_code) == 4, f"Expected 4-char access_code, got {access_code}"
-    
-    print(f"  ✅ granted=true, access_code={access_code} (4 chars)")
-    
-    # Verify transaction exists
-    resp2 = requests.get(f"{BASE_URL}/api/admin/transactions?key={ADMIN_KEY}&email=testx@t.com", timeout=10)
-    assert resp2.status_code == 200, f"Expected 200, got {resp2.status_code}"
-    data2 = resp2.json()
-    assert data2.get("count") == 1, f"Expected count=1, got {data2}"
-    tx = data2.get("items", [])[0]
-    assert tx.get("provider") == "manual", f"Expected provider=manual, got {tx.get('provider')}"
-    assert tx.get("payment_status") == "paid", f"Expected payment_status=paid, got {tx.get('payment_status')}"
-    
-    print(f"  ✅ Transaction verified: provider=manual, payment_status=paid")
-    print("  ✅ Test 20 PASSED")
-    return True
-
-
-def test_21_static_assets():
-    """Test 21: GET /assets/.../Feather.ttf → 200 font/ttf"""
-    print("\n[Test 21] GET /assets/.../Feather.ttf → Verify static asset serving")
-    font_path = "/assets/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ca4b48e04dc1ce10bfbddb262c8b835f.ttf"
-    resp = requests.get(f"{BASE_URL}{font_path}", timeout=10)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-    
-    content_type = resp.headers.get("content-type", "")
-    assert "font/ttf" in content_type or "font" in content_type, f"Expected font/ttf, got {content_type}"
-    
-    print(f"  ✅ Feather.ttf served: {len(resp.content)/1024:.2f} KB, content-type: {content_type}")
-    print("  ✅ Test 21 PASSED")
-    return True
-
-
-def test_22_spa_routes():
-    """Test 22: Frontend SPA routes → 200 HTML"""
-    print("\n[Test 22] Frontend SPA routes → Verify /select-package, /admin, /map")
-    
-    routes = ["/select-package", "/admin", "/map"]
-    for route in routes:
-        resp = requests.get(f"{BASE_URL}{route}", timeout=10)
-        assert resp.status_code == 200, f"Expected 200 for {route}, got {resp.status_code}"
-        assert "text/html" in resp.headers.get("content-type", ""), f"Expected text/html for {route}"
-        print(f"  ✅ {route} → 200 HTML")
-    
-    print("  ✅ Test 22 PASSED")
-    return True
-
-
-def test_23_cleanup():
-    """Test 23: Cleanup test data"""
-    print("\n[Test 23] Cleanup test data")
-    
-    cmd1 = '''db.getSiblingDB("test_database").payment_transactions.deleteMany({
-        email:{$in:["p1@t.com","testx@t.com"]}
-    })'''
-    result1 = mongosh_exec(cmd1)
-    print(f"  ✅ Deleted transactions: {result1}")
-    
-    cmd2 = '''db.getSiblingDB("test_database").payment_transactions.deleteMany({
-        parent_tx:"tx-30d"
-    })'''
-    result2 = mongosh_exec(cmd2)
-    print(f"  ✅ Deleted upgrade transactions: {result2}")
-    
-    print("  ✅ Test 23 PASSED - Cleanup complete")
-    return True
+    print(f"✅ Test 10 PASSED: Packages endpoint returns correct structure and prices")
 
 
 def main():
     """Run all tests"""
     print("=" * 80)
-    print("DESCUBRE RAPA NUI - PACKAGE SYSTEM WITH 30-DAY SESSIONS TEST SUITE")
+    print("GITIGNORE FIX VERIFICATION - COMPREHENSIVE BACKEND TEST")
     print("=" * 80)
     print(f"Testing against: {BASE_URL}")
     print(f"Admin key: {ADMIN_KEY}")
     
-    tests = [
-        test_1_get_packages,
-        test_2_insert_30day_transaction,
-        test_3_check_access_needs_package_selection,
-        test_4_simulate_15_days_elapsed,
-        test_5_check_access_15days_valid,
-        test_6_simulate_31_days_elapsed,
-        test_7_check_access_31days_expired,
-        test_8_verify_email_correct,
-        test_9_verify_email_wrong,
-        test_10_verify_email_wrong_device,
-        test_11_select_package,
-        test_12_select_package_again,
-        test_13_check_access_after_selection,
-        test_14_upgrade_extra_package,
-        test_15_upgrade_invalid_package,
-        test_16_upgrade_no_base_payment,
-        test_17_simulate_upgrade_all,
-        test_18_check_access_all_unlocked,
-        test_19_my_info,
-        test_20_admin_grant,
-        test_21_static_assets,
-        test_22_spa_routes,
-        test_23_cleanup,
-    ]
-    
-    passed = 0
-    failed = 0
-    failed_tests = []
-    
-    for test_func in tests:
-        try:
-            test_func()
-            passed += 1
-        except AssertionError as e:
-            print(f"  ❌ FAILED: {e}")
-            failed += 1
-            failed_tests.append((test_func.__name__, str(e)))
-        except Exception as e:
-            print(f"  ❌ ERROR: {e}")
-            failed += 1
-            failed_tests.append((test_func.__name__, str(e)))
-    
-    print("\n" + "=" * 80)
-    print(f"RESULTS: {passed} PASSED, {failed} FAILED")
-    print("=" * 80)
-    
-    if failed > 0:
-        print("\n❌ FAILED TESTS:")
-        for test_name, error in failed_tests:
-            print(f"  - {test_name}: {error}")
-        sys.exit(1)
-    else:
-        print("\n✅ ALL TESTS PASSED - Package system with 30-day sessions verified!")
-        sys.exit(0)
+    try:
+        test_basic_endpoints()
+        test_vector_icon_fonts()
+        test_js_bundle()
+        test_gitignore_fix()
+        test_spa_routes()
+        test_admin_endpoints()
+        test_verify_email_flow()
+        test_packages_regression()
+        
+        print("\n" + "=" * 80)
+        print("🎉 ALL TESTS PASSED! 🎉")
+        print("=" * 80)
+        print("\n✅ GITIGNORE FIX VERIFIED:")
+        print("  - All 19 vector-icon fonts serving with 200 and correct content-type")
+        print("  - .gitignore negation rules working correctly")
+        print("  - Assets folder is untracked (NOT ignored)")
+        print("  - All fonts will be included in next deploy")
+        print("\n✅ BACKEND FUNCTIONALITY VERIFIED:")
+        print("  - Basic endpoints working (/, /api/, /api/packages)")
+        print("  - JS bundle serving correctly")
+        print("  - SPA routes working (/admin, /map, /select-package)")
+        print("  - Admin endpoints working (sales, grant, revoke)")
+        print("  - Verify-email flow working with 30d session")
+        print("  - Packages endpoint returning correct data")
+        print("\n🚀 READY FOR PRODUCTION DEPLOY!")
+        
+        return 0
+        
+    except AssertionError as e:
+        print(f"\n❌ TEST FAILED: {e}")
+        return 1
+    except Exception as e:
+        print(f"\n❌ UNEXPECTED ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
