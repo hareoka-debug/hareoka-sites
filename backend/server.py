@@ -336,8 +336,7 @@ async def _mark_paid(query: dict):
                 }},
             )
             logger.info(
-                f"🎁 Sorteo camiseta: {parent.get('email')} tiene código {raffle_code} "
-                "(TODO: enviar por email cuando configuremos servicio)"
+                f"🎁 Sorteo camiseta: {parent.get('email')} tiene código {raffle_code}"
             )
         elif upgrade_kind == "package" and result.get("target_package"):
             new_pkg = result["target_package"]
