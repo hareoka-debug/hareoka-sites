@@ -18,7 +18,7 @@ load_dotenv(Path(__file__).parent.parent.parent / "frontend" / ".env")
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "").rstrip("/")
-ADMIN_KEY = os.environ.get("ADMIN_KEY", "RAPANUI-2026")
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
 assert BASE_URL, "EXPO_PUBLIC_BACKEND_URL must be set"
 API = f"{BASE_URL}/api"
 

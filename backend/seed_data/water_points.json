@@ -1,0 +1,58 @@
+[
+  {
+    "id": "vai-1",
+    "name": "Supermercado HE IVI",
+    "lat": -27.149,
+    "lng": -109.4315,
+    "type": "tienda",
+    "description": "El supermercado más grande de Hanga Roa. Agua VAINATIVA embotellada, bloqueador e insumos para el trekking."
+  },
+  {
+    "id": "vai-2",
+    "name": "Feria Municipal de Hanga Roa",
+    "lat": -27.1486,
+    "lng": -109.4308,
+    "type": "tienda",
+    "description": "Agua embotellada, fruta fresca local (piña, plátano) ideal para hidratarse en ruta."
+  },
+  {
+    "id": "vai-3",
+    "name": "Almacenes Av. Atamu Tekena",
+    "lat": -27.1445,
+    "lng": -109.4295,
+    "type": "tienda",
+    "description": "Varios minimarkets a lo largo de la avenida principal. Última opción antes de salir a rutas rurales del norte."
+  },
+  {
+    "id": "vai-4",
+    "name": "Kiosco Playa Anakena",
+    "lat": -27.0737,
+    "lng": -109.3238,
+    "type": "tienda",
+    "description": "Único punto de venta fuera de Hanga Roa. Agua, jugos y empanadas junto a la playa."
+  },
+  {
+    "id": "vai-5",
+    "name": "Minimarket Sector Mataveri",
+    "lat": -27.158,
+    "lng": -109.436,
+    "type": "tienda",
+    "description": "Práctico para abastecerse antes de subir al Rano Kau u Orongo."
+  },
+  {
+    "id": "vai-6",
+    "name": "Panadería HARAO TIRE",
+    "lat": -27.147,
+    "lng": -109.4285,
+    "type": "tienda",
+    "description": "Pan fresco y agua VAINATIVA fría, ideal para armar tu colación antes de salir a la ruta."
+  },
+  {
+    "id": "vai-7",
+    "name": "Locales de Rano Raraku",
+    "lat": -27.1225,
+    "lng": -109.293,
+    "type": "tienda",
+    "description": "Locales de venta en el sector de la cantera Rano Raraku: agua VAINATIVA, jugos y snacks para el recorrido."
+  }
+]

@@ -5,7 +5,7 @@ import requests
 
 BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL") or "https://rapa-nui-routes.preview.emergentagent.com"
 BASE_URL = BASE_URL.rstrip("/")
-ADMIN_KEY = "RAPANUI-2026"
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
 
 
 @pytest.fixture
