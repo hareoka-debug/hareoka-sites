@@ -28,9 +28,9 @@ import {
   getDeviceId,
   getLocalPaid,
   getPendingSession,
-  restoreByEmail,
   setLocalPaid,
   setPendingSession,
+  verifyEmailOnly,
 } from "@/src/lib/api";
 import { storage } from "@/src/utils/storage";
 import { colors, radius, serif, spacing } from "@/src/lib/theme";
@@ -60,10 +60,8 @@ export default function Paywall() {
   const [providers, setProviders] = useState<Providers | null>(null);
   const [method, setMethod] = useState<string>("mercadopago");
   const [email, setEmail] = useState("");
-  const [whatsappPhone, setWhatsappPhone] = useState("");
   const [showRestore, setShowRestore] = useState(false);
   const [restoreEmail, setRestoreEmail] = useState("");
-  const [restoreCode, setRestoreCode] = useState("");
 
   // Pedir al navegador (iPhone/Safari incluido) que NO borre los datos de la app
   useEffect(() => {
@@ -77,25 +75,6 @@ export default function Paywall() {
   }, []);
 
   const verifyAccess = useCallback(async (): Promise<boolean> => {
-    const localPaid = await getLocalPaid();
-    if (localPaid) {
-      // Verificamos también con el servidor: la sesión puede haber expirado (48h)
-      try {
-        const deviceId = await getDeviceId();
-        const detailed = await checkAccessDetailed(deviceId);
-        if (detailed.has_access) return true;
-        if (detailed.needs_verification) {
-          // La sesión venció → forzamos re-login por email + código
-          await setLocalPaid(); // dejamos flag "ya pagó" pero mostramos restore
-          setShowRestore(true);
-          setRestoreEmail(detailed.email || "");
-          return false;
-        }
-      } catch {
-        // sin conexión → confiamos en el flag local
-        return true;
-      }
-    }
     const deviceId = await getDeviceId();
 
     // ¿Hay un pago pendiente de una sesión anterior?
@@ -106,9 +85,9 @@ export default function Paywall() {
         if (st.payment_status === "paid") {
           await setLocalPaid();
           await clearPendingSession();
-          return true;
+        } else if (st.status === "expired") {
+          await clearPendingSession();
         }
-        if (st.status === "expired") await clearPendingSession();
       } catch {
         // ignorar
       }
@@ -118,19 +97,25 @@ export default function Paywall() {
       const detailed = await checkAccessDetailed(deviceId);
       if (detailed.has_access) {
         await setLocalPaid();
+        // Si pagó pero aún no eligió paquete → mandar a selección
+        if (detailed.needs_package_selection) {
+          router.replace("/select-package");
+          return true;
+        }
         return true;
       }
       if (detailed.needs_verification) {
-        // Pagó pero sesión expiró: mostrar restore automáticamente
         setShowRestore(true);
         setRestoreEmail(detailed.email || "");
         return false;
       }
     } catch {
       // sin conexión
+      const localPaid = await getLocalPaid();
+      if (localPaid) return true;
     }
     return false;
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     (async () => {
@@ -156,28 +141,16 @@ export default function Paywall() {
       setError("Ingresa un email válido: es tu respaldo para recuperar la compra.");
       return;
     }
-    const phone = whatsappPhone.trim().replace(/[^\d+]/g, "");
-    if (phone && !/^\+?\d{8,15}$/.test(phone)) {
-      setError("Ingresa un número de WhatsApp válido (ej: +56912345678).");
-      return;
-    }
     setPaying(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       const deviceId = await getDeviceId();
       await storage.setItem("rapa-nui-email", email.trim().toLowerCase());
-      if (phone) await storage.setItem("rapa-nui-phone", phone);
       const origin =
         Platform.OS === "web" && typeof window !== "undefined"
           ? window.location.origin
           : (process.env.EXPO_PUBLIC_BACKEND_URL as string);
-      const { url, tx_id } = await createCheckout(
-        deviceId,
-        origin,
-        method,
-        email.trim(),
-        phone || undefined,
-      );
+      const { url, tx_id } = await createCheckout(deviceId, origin, method, email.trim());
       await setPendingSession(tx_id);
       if (Platform.OS === "web" && typeof window !== "undefined") {
         window.location.href = url;
@@ -201,28 +174,32 @@ export default function Paywall() {
       setShowRestore(true);
       return;
     }
-    if (!/^\S+@\S+\.\S+$/.test(restoreEmail.trim())) {
+    const em = restoreEmail.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(em)) {
       setError("Ingresa el email con el que pagaste.");
       return;
     }
     setRestoring(true);
     try {
       const deviceId = await getDeviceId();
-      // 1) Restaurar por email + código de acceso
-      const result = await restoreByEmail(
-        restoreEmail.trim().toLowerCase(),
-        deviceId,
-        restoreCode.trim() || undefined,
-      );
-      if (result.has_access) {
+      // Verificar solo con email + mismo dispositivo (renueva sesión 30d)
+      const result = await verifyEmailOnly(deviceId, em);
+      if (result.verified) {
         await setLocalPaid();
+        // Chequear si eligió paquete o no
+        try {
+          const access = await checkAccessDetailed(deviceId);
+          if (access.needs_package_selection) {
+            router.replace("/select-package");
+            return;
+          }
+        } catch {
+          /* ignore */
+        }
         router.replace("/map");
         return;
       }
-      // Mensajes específicos según el motivo
-      if (result.reason === "code_invalid") {
-        setError("Código incorrecto. Es el número de 4 dígitos que recibiste al pagar.");
-      } else if (result.reason === "wrong_device") {
+      if (result.reason === "wrong_device") {
         setError(
           result.message ||
             "Esta compra pertenece a otro dispositivo. La app se usa solo en el dispositivo que pagó.",
@@ -232,8 +209,8 @@ export default function Paywall() {
       } else {
         setError("No pudimos verificar tu acceso.");
       }
-    } catch {
-      setError("Error de conexión. Intenta de nuevo.");
+    } catch (e: any) {
+      setError(e?.message || "Error de conexión. Intenta de nuevo.");
     } finally {
       setRestoring(false);
     }
@@ -308,7 +285,7 @@ export default function Paywall() {
 
           <TextInput
             style={styles.emailInput}
-            placeholder="Tu email (respaldo para recuperar tu compra)"
+            placeholder="Tu email (necesario para volver a entrar)"
             placeholderTextColor="rgba(249,248,246,0.5)"
             value={email}
             onChangeText={setEmail}
@@ -316,18 +293,8 @@ export default function Paywall() {
             keyboardType="email-address"
             testID="pay-email-input"
           />
-
-          <TextInput
-            style={styles.emailInput}
-            placeholder="Tu WhatsApp (+56912345678)"
-            placeholderTextColor="rgba(249,248,246,0.5)"
-            value={whatsappPhone}
-            onChangeText={setWhatsappPhone}
-            keyboardType="phone-pad"
-            testID="pay-whatsapp-input"
-          />
           <Text style={styles.helpLine}>
-            Enviaremos tu código de acceso de 4 dígitos a este WhatsApp.
+            Recibirás acceso en este dispositivo por 30 días. Después ingresas de nuevo tu email.
           </Text>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -358,18 +325,8 @@ export default function Paywall() {
                 keyboardType="email-address"
                 testID="restore-email-input"
               />
-              <TextInput
-                style={[styles.emailInput, styles.codeInput]}
-                placeholder="Código de 4 dígitos"
-                placeholderTextColor="rgba(249,248,246,0.5)"
-                value={restoreCode}
-                onChangeText={(t) => setRestoreCode(t.replace(/\D/g, "").slice(0, 4))}
-                keyboardType="number-pad"
-                maxLength={4}
-                testID="restore-code-input"
-              />
               <Text style={styles.codeHint}>
-                Es el código que recibiste al pagar. Solo funciona en el mismo dispositivo con el que compraste.
+                Solo funciona en el dispositivo con el que compraste.
               </Text>
             </>
           ) : null}

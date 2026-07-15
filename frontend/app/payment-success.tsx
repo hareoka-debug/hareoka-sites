@@ -1,31 +1,25 @@
 import { Feather } from "@expo/vector-icons";
-import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Linking,
-  Platform,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   View,
-} from "react-native";import { useSafeAreaInsets } from "react-native-safe-area-context";
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  MyPurchaseInfo,
   checkPaymentStatus,
   clearPendingSession,
-  fetchMyPurchaseInfo,
-  getDeviceId,
   setLocalPaid,
 } from "@/src/lib/api";
 import { colors, radius, serif, spacing } from "@/src/lib/theme";
 
-const MAX_ATTEMPTS = 10;
+const MAX_ATTEMPTS = 12;
 
 export default function PaymentSuccess() {
   const params = useLocalSearchParams<{ tx?: string; session_id?: string }>();
@@ -33,8 +27,6 @@ export default function PaymentSuccess() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [state, setState] = useState<"verifying" | "paid" | "expired" | "error">("verifying");
-  const [info, setInfo] = useState<MyPurchaseInfo | null>(null);
-  const [copied, setCopied] = useState(false);
   const attempts = useRef(0);
 
   useEffect(() => {
@@ -54,14 +46,6 @@ export default function PaymentSuccess() {
           await setLocalPaid();
           await clearPendingSession();
           setState("paid");
-          // Cargar info completa con código de acceso
-          try {
-            const deviceId = await getDeviceId();
-            const purchaseInfo = await fetchMyPurchaseInfo(deviceId);
-            if (!cancelled) setInfo(purchaseInfo);
-          } catch {
-            /* silencioso */
-          }
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           return;
         }
@@ -85,49 +69,6 @@ export default function PaymentSuccess() {
       cancelled = true;
     };
   }, [txId]);
-
-  const handleCopyCode = async () => {
-    if (!info?.access_code) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    try {
-      await Clipboard.setStringAsync(info.access_code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const buildShareMessage = () => {
-    if (!info) return "";
-    return (
-      `🗿 Descubre Rapa Nui\n\n` +
-      `Tu código de acceso:  *${info.access_code}*\n` +
-      `Email: ${info.email}\n\n` +
-      `Este código lo necesitarás cuando cierres la app o pasen ${info.session_ttl_hours ?? 48} horas. Solo funciona en el mismo dispositivo con el que compraste.`
-    );
-  };
-
-  const handleShareWhatsApp = async () => {
-    if (!info) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    const msg = buildShareMessage();
-    // Si tenemos el número del cliente, abrimos wa.me/PHONE para que se envíe
-    // el código a sí mismo. Si no, abrimos wa.me sin destinatario (el usuario elige).
-    const phone = (info.whatsapp_phone || "").replace(/[^\d]/g, "");
-    const url = phone
-      ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
-      : `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
-    try {
-      if (Platform.OS === "web" && typeof window !== "undefined") {
-        window.open(url, "_blank");
-        return;
-      }
-      await Linking.openURL(url);
-    } catch {
-      await Share.share({ message: msg }).catch(() => {});
-    }
-  };
 
   return (
     <ScrollView
@@ -153,55 +94,24 @@ export default function PaymentSuccess() {
           </View>
           <Text style={styles.title}>¡Iorana! Pago exitoso</Text>
           <Text style={styles.sub}>
-            Ya tienes acceso a la guía en este dispositivo. Vas a poder usarla las próximas 48 horas
-            sin volver a ingresar el código.
+            Ya tienes acceso a la guía en este dispositivo. Vas a poder usarla para descubrir Rapa Nui.
+            Escoge tu ruta. Si las abres todas, disfruta y participa por una camiseta exclusiva 🎁.
           </Text>
 
-          {info?.access_code ? (
-            <View style={styles.codeCard}>
-              <View style={styles.codeBadge}>
-                <Feather name="lock" size={12} color={colors.warning} />
-                <Text style={styles.codeBadgeText}>TU CÓDIGO DE ACCESO</Text>
-              </View>
-              <Text style={styles.code} selectable testID="access-code">
-                {info.access_code}
-              </Text>
-              <Text style={styles.emailLine}>
-                para {info.email}
-              </Text>
-
-              <Text style={styles.codeExplain}>
-                Este código lo necesitarás cuando cierres la app o pasen {info.session_ttl_hours ?? 48} horas.
-                Solo funciona en este mismo dispositivo.
-              </Text>
-
-              <View style={styles.actions}>
-                <Pressable style={styles.copyBtn} onPress={handleCopyCode} testID="copy-code">
-                  <Feather
-                    name={copied ? "check" : "copy"}
-                    size={16}
-                    color={copied ? colors.success : colors.onSurface}
-                  />
-                  <Text style={styles.copyText}>{copied ? "Copiado" : "Copiar código"}</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.waBtn}
-                  onPress={handleShareWhatsApp}
-                  testID="share-whatsapp"
-                >
-                  <Feather name="message-circle" size={16} color="#FFFFFF" />
-                  <Text style={styles.waText}>Enviar a mi WhatsApp</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : null}
+          <View style={styles.infoCard}>
+            <Feather name="info" size={16} color={colors.info} />
+            <Text style={styles.infoText}>
+              Acceso válido por 30 días en este dispositivo. Si cierras la app o pasa el tiempo,
+              solo escribes tu email para volver a entrar.
+            </Text>
+          </View>
 
           <Pressable
             style={styles.cta}
-            onPress={() => router.replace("/map")}
-            testID="start-exploring"
+            onPress={() => router.replace("/select-package")}
+            testID="choose-package"
           >
-            <Text style={styles.ctaText}>Comenzar a explorar</Text>
+            <Text style={styles.ctaText}>Elegir mi paquete de rutas</Text>
           </Pressable>
         </>
       )}
@@ -266,87 +176,17 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceSecondary,
     textAlign: "center",
   },
-  codeCard: {
-    width: "100%",
-    backgroundColor: colors.surfaceInverse,
-    borderRadius: radius.lg,
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.lg,
-    alignItems: "center",
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  codeBadge: {
+  infoCard: {
     flexDirection: "row",
-    gap: 6,
-    alignItems: "center",
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    backgroundColor: "rgba(232,164,80,0.15)",
-  },
-  codeBadgeText: {
-    color: colors.warning,
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 1.5,
-  },
-  code: {
-    fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "monospace" }),
-    fontSize: 42,
-    fontWeight: "800",
-    color: colors.onSurfaceInverse,
-    letterSpacing: 10,
-    paddingLeft: 10,
-    marginTop: spacing.xs,
-  },
-  emailLine: {
-    fontSize: 12,
-    color: "rgba(249,248,246,0.65)",
-    marginTop: -4,
-  },
-  codeExplain: {
-    fontSize: 12,
-    lineHeight: 18,
-    color: "rgba(249,248,246,0.85)",
-    textAlign: "center",
-    marginTop: spacing.md,
-    paddingHorizontal: spacing.sm,
-  },
-  bold: { fontWeight: "700", color: colors.onSurfaceInverse },
-  actions: {
-    width: "100%",
     gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  copyBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-    minHeight: 46,
+    backgroundColor: colors.surfaceSecondary,
     borderRadius: radius.md,
-    backgroundColor: colors.surface,
+    padding: spacing.md,
+    alignItems: "flex-start",
+    width: "100%",
+    marginTop: spacing.md,
   },
-  copyText: { fontSize: 14, fontWeight: "600", color: colors.onSurface },
-  waBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-    minHeight: 46,
-    borderRadius: radius.md,
-    backgroundColor: "#25D366",
-  },
-  waText: { fontSize: 14, fontWeight: "700", color: "#FFFFFF" },
-  shareBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-    minHeight: 40,
-  },
-  shareText: { fontSize: 13, color: colors.onSurfaceSecondary },
+  infoText: { flex: 1, fontSize: 12, color: colors.onSurfaceSecondary, lineHeight: 17 },
   cta: {
     backgroundColor: colors.brand,
     borderRadius: radius.pill,
@@ -354,7 +194,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: spacing.md,
+    marginTop: spacing.lg,
   },
   ctaText: { color: colors.onBrand, fontSize: 16, fontWeight: "700" },
 });

@@ -67,16 +67,62 @@ async def get_water_points():
 # ---------------- Pagos (Stripe + Mercado Pago + Flow) ----------------
 # Precio fijo definido en el servidor: $3.000 CLP.
 # Stripe: la librería multiplica amount * 100, por lo que 30.0 -> unit_amount 3000 CLP.
-PRICE_CLP_DISPLAY = 3000
+PRICE_CLP_DISPLAY = 3000  # Precio base (1 paquete de rutas)
+PRICE_EXTRA_PACKAGE_CLP = 3000  # Comprar un paquete adicional
+PRICE_ALL_ROUTES_CLP = 5000  # Desbloquear todos los paquetes + sorteo camiseta
 PRICE_AMOUNT_FOR_STRIPE_LIB = 30.0
 
 # ---------------- Control de acceso ----------------
 # 1 email = 1 pago = 1 dispositivo.
 MAX_DEVICES_PER_PAYMENT = int(os.environ.get("MAX_DEVICES_PER_PAYMENT", "1"))
-# Sesión válida por este tiempo desde la última verificación (48h por defecto).
-SESSION_TTL_HOURS = int(os.environ.get("SESSION_TTL_HOURS", "48"))
-# Longitud del código de acceso (4 dígitos).
+# Sesión válida por este tiempo desde la última verificación (30 días).
+SESSION_TTL_HOURS = int(os.environ.get("SESSION_TTL_HOURS", "720"))
+# El código de acceso interno sigue siendo de 4 dígitos (para uso admin), pero
+# el cliente ya no lo ve — el restore es solo por email.
 ACCESS_CODE_LENGTH = 4
+
+# ---------------- Paquetes de rutas ----------------
+# 11 rutas totales, agrupadas en 3 paquetes temáticos. El cliente escoge UNO
+# con su pago base de $3.000. Puede comprar paquetes extra a $3.000 c/u o
+# desbloquear todos por $5.000 (y participa por sorteo de camiseta Rapa Nui).
+PACKAGES = [
+    {
+        "id": "hanga-roa",
+        "name": "Hanga Roa y Alrededores",
+        "description": "Rutas urbanas para descubrir la capital de Rapa Nui.",
+        "emoji": "📍",
+        "routes": [
+            "circuito-hanga-roa",
+            "costanera-policarpo-toro",
+            "ana-kai-tangata",
+            "rano-kau-orongo",
+        ],
+    },
+    {
+        "id": "norte-playas",
+        "name": "Norte y Playas",
+        "description": "Playas paradisíacas y el volcán más alto de la isla.",
+        "emoji": "🏖️",
+        "routes": [
+            "anakena-ovahe",
+            "terevaka",
+            "costa-norte",
+            "akivi-ana-te-pahu",
+        ],
+    },
+    {
+        "id": "moais-este",
+        "name": "Grandes Moáis del Este",
+        "description": "Los sitios arqueológicos más impresionantes de la isla.",
+        "emoji": "🗿",
+        "routes": [
+            "rano-raraku-tongariki",
+            "peninsula-poike",
+            "vinapu",
+        ],
+    },
+]
+PACKAGES_BY_ID = {p["id"]: p for p in PACKAGES}
 
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
 MP_ACCESS_TOKEN = os.environ.get("MP_ACCESS_TOKEN", "")
@@ -258,10 +304,51 @@ async def create_payment_checkout(body: CheckoutRequest, request: Request):
 
 
 async def _mark_paid(query: dict):
-    await db.payment_transactions.update_one(
+    """Marca una transacción como pagada. Si es un upgrade (compra adicional
+    de paquete o de todos), aplica los cambios sobre la compra base (parent_tx)."""
+    now = datetime.now(timezone.utc).isoformat()
+    result = await db.payment_transactions.find_one_and_update(
         {**query, "payment_status": {"$ne": "paid"}},
-        {"$set": {"payment_status": "paid", "paid_at": datetime.now(timezone.utc).isoformat()}},
+        {"$set": {"payment_status": "paid", "paid_at": now}},
+        return_document=True,
     )
+    if not result:
+        return
+    # ¿Es un upgrade? Actualizar la compra base
+    if result.get("kind") == "upgrade" and result.get("parent_tx"):
+        upgrade_kind = result.get("upgrade_kind")
+        parent = await db.payment_transactions.find_one({"id": result["parent_tx"]})
+        if not parent:
+            return
+        owned = parent.get("owned_packages") or []
+        if upgrade_kind == "all":
+            # Desbloquear todos + generar código de sorteo
+            raffle_code = f"RAPA-{secrets.token_hex(3).upper()}"
+            all_pkg_ids = [p["id"] for p in PACKAGES]
+            await db.payment_transactions.update_one(
+                {"id": parent["id"]},
+                {"$set": {
+                    "owned_packages": all_pkg_ids,
+                    "all_routes_unlocked": True,
+                    "raffle_code": raffle_code,
+                    "raffle_participating": True,
+                    "raffle_registered_at": now,
+                }},
+            )
+            logger.info(
+                f"🎁 Sorteo camiseta: {parent.get('email')} tiene código {raffle_code} "
+                "(TODO: enviar por email cuando configuremos servicio)"
+            )
+        elif upgrade_kind == "package" and result.get("target_package"):
+            new_pkg = result["target_package"]
+            if new_pkg not in owned:
+                owned = list(owned) + [new_pkg]
+                update: dict = {"owned_packages": owned}
+                if len(owned) == len(PACKAGES):
+                    update["all_routes_unlocked"] = True
+                await db.payment_transactions.update_one(
+                    {"id": parent["id"]}, {"$set": update}
+                )
 
 
 async def _resolve_status(doc: dict, request: Request) -> dict:
@@ -339,94 +426,250 @@ def _is_session_valid(paid_doc: dict) -> bool:
 
 @api_router.get("/payments/access/{device_id}")
 async def check_access(device_id: str):
-    """Verifica si un device_id tiene acceso VÁLIDO (pago + sesión activa <48h).
-    Retorna:
-      - has_access: True si tiene sesión activa
-      - needs_verification: True si pagó pero la sesión expiró
-      - has_access: False si nunca pagó
+    """Verifica si un device_id tiene acceso VÁLIDO (pago + sesión activa <30 días).
+    Devuelve además los paquetes desbloqueados y si el cliente participa en el sorteo.
     """
     paid = await db.payment_transactions.find_one(
         {"device_id": device_id, "payment_status": "paid"}
     )
     if paid:
-        if _is_session_valid(paid):
-            return {"has_access": True, "email": paid.get("email"), "is_purchaser": True}
-        # Pagó pero necesita re-verificar
-        return {
-            "has_access": False,
-            "needs_verification": True,
+        base = {
             "email": paid.get("email"),
             "is_purchaser": True,
+            "owned_packages": paid.get("owned_packages") or [],
+            "all_routes_unlocked": bool(paid.get("all_routes_unlocked")),
+            "raffle_participating": bool(paid.get("raffle_participating")),
+            "raffle_code": paid.get("raffle_code"),
+            "needs_package_selection": not (paid.get("owned_packages") or [])
+                and not paid.get("all_routes_unlocked"),
         }
+        if _is_session_valid(paid):
+            return {"has_access": True, **base}
+        return {"has_access": False, "needs_verification": True, **base}
 
     grant = await db.access_grants.find_one({"device_id": device_id})
     if grant:
         source = await db.payment_transactions.find_one({"id": grant.get("source_tx")})
         if source and source.get("payment_status") == "paid":
-            # Los grants manuales (admin) no tienen sesión expirable
-            if source.get("provider") == "manual":
-                return {"has_access": True, "email": grant.get("email"), "is_purchaser": False}
-            # Grants normales: usan el timestamp del grant como base de sesión
             grant_synth = {
                 "last_verified_at": grant.get("verified_at") or grant.get("granted_at"),
                 "paid_at": grant.get("granted_at"),
             }
-            if _is_session_valid(grant_synth):
-                return {"has_access": True, "email": grant.get("email"), "is_purchaser": False}
-            return {
-                "has_access": False,
-                "needs_verification": True,
+            base = {
                 "email": grant.get("email"),
                 "is_purchaser": False,
+                "owned_packages": source.get("owned_packages") or [],
+                "all_routes_unlocked": bool(source.get("all_routes_unlocked")),
+                "raffle_participating": bool(source.get("raffle_participating")),
+                "needs_package_selection": not (source.get("owned_packages") or [])
+                    and not source.get("all_routes_unlocked"),
             }
+            if source.get("provider") == "manual":
+                return {"has_access": True, **base}
+            if _is_session_valid(grant_synth):
+                return {"has_access": True, **base}
+            return {"has_access": False, "needs_verification": True, **base}
     return {"has_access": False}
 
 
-class VerifyCodeRequest(BaseModel):
+@api_router.get("/packages")
+async def list_packages():
+    """Lista de paquetes disponibles con nombres de rutas para mostrar en la UI."""
+    # Cargar rutas para poder mapear ids → nombres
+    all_routes = await db.routes.find({}, {"_id": 0, "id": 1, "name": 1, "difficulty": 1, "photo": 1}).to_list(200)
+    routes_by_id = {r["id"]: r for r in all_routes}
+    result = []
+    for pkg in PACKAGES:
+        routes_info = []
+        for rid in pkg["routes"]:
+            r = routes_by_id.get(rid)
+            if r:
+                routes_info.append({
+                    "id": r["id"],
+                    "name": r["name"],
+                    "difficulty": r.get("difficulty"),
+                    "photo": r.get("photo"),
+                })
+        result.append({
+            "id": pkg["id"],
+            "name": pkg["name"],
+            "description": pkg["description"],
+            "emoji": pkg["emoji"],
+            "route_count": len(pkg["routes"]),
+            "routes": routes_info,
+        })
+    return {"packages": result, "prices": {
+        "base_clp": PRICE_CLP_DISPLAY,
+        "extra_package_clp": PRICE_EXTRA_PACKAGE_CLP,
+        "all_routes_clp": PRICE_ALL_ROUTES_CLP,
+    }}
+
+
+class SelectPackageRequest(BaseModel):
     device_id: str
     email: str
-    access_code: str
+    package_id: str
 
 
-@api_router.post("/payments/verify-code")
-async def verify_code(body: VerifyCodeRequest):
-    """Verifica email + código y renueva la sesión de 48h en el dispositivo actual.
-    Solo funciona en el MISMO dispositivo que compró (u obtuvo grant)."""
+@api_router.post("/payments/select-package")
+async def select_first_package(body: SelectPackageRequest):
+    """Después del primer pago, el cliente elige UN paquete de rutas (1 de 3)."""
     email = body.email.strip().lower()
-    code = (body.access_code or "").strip()
+    if body.package_id not in PACKAGES_BY_ID:
+        raise HTTPException(status_code=400, detail="Paquete inválido")
+    tx = await db.payment_transactions.find_one(
+        {"device_id": body.device_id, "email": email, "payment_status": "paid"}
+    )
+    if not tx:
+        raise HTTPException(status_code=403, detail="No hay pago registrado para este dispositivo")
+    # Solo permite elegir si aún no ha elegido paquete
+    owned = tx.get("owned_packages") or []
+    if owned:
+        return {"already_selected": True, "owned_packages": owned}
+    now = datetime.now(timezone.utc).isoformat()
+    await db.payment_transactions.update_one(
+        {"id": tx["id"]},
+        {"$set": {
+            "selected_package": body.package_id,
+            "owned_packages": [body.package_id],
+            "package_selected_at": now,
+            "last_verified_at": now,
+        }},
+    )
+    return {"selected": body.package_id, "owned_packages": [body.package_id]}
+
+
+class UpgradeRequest(BaseModel):
+    device_id: str
+    email: str
+    kind: str  # "package" | "all"
+    package_id: str | None = None  # requerido si kind=package
+    provider: str = "mercadopago"  # mercadopago | flow | stripe
+    origin_url: str
+
+
+@api_router.post("/payments/upgrade-checkout")
+async def create_upgrade_checkout(body: UpgradeRequest, request: Request):
+    """Crea un checkout para comprar un paquete adicional o desbloquear todo."""
+    email = body.email.strip().lower()
+    tx = await db.payment_transactions.find_one(
+        {"device_id": body.device_id, "email": email, "payment_status": "paid"}
+    )
+    if not tx:
+        raise HTTPException(status_code=403, detail="Necesitas la compra base primero")
+
+    if body.kind == "all":
+        amount = PRICE_ALL_ROUTES_CLP
+        label = "Todos los paquetes + sorteo camiseta"
+    elif body.kind == "package":
+        if not body.package_id or body.package_id not in PACKAGES_BY_ID:
+            raise HTTPException(status_code=400, detail="Paquete inválido")
+        owned = tx.get("owned_packages") or []
+        if body.package_id in owned:
+            raise HTTPException(status_code=400, detail="Ya tienes este paquete")
+        amount = PRICE_EXTRA_PACKAGE_CLP
+        label = f"Paquete extra: {PACKAGES_BY_ID[body.package_id]['name']}"
+    else:
+        raise HTTPException(status_code=400, detail="kind debe ser 'package' o 'all'")
+
+    origin = body.origin_url.rstrip("/")
+    host_url = str(request.base_url).rstrip("/")
+    up_id = str(uuid.uuid4())
+    doc = {
+        "id": up_id,
+        "provider": body.provider,
+        "device_id": body.device_id,
+        "email": email,
+        "origin_url": origin,
+        "amount_clp": amount,
+        "currency": "clp",
+        "payment_status": "pending",
+        "kind": "upgrade",
+        "upgrade_kind": body.kind,
+        "target_package": body.package_id,
+        "parent_tx": tx["id"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    # Para simplificar: solo aceptamos MP para upgrades por ahora (podemos extender)
+    if body.provider == "mercadopago":
+        if not MP_ACCESS_TOKEN:
+            raise HTTPException(status_code=503, detail="MP no configurado")
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                res = await client.post(
+                    "https://api.mercadopago.com/checkout/preferences",
+                    headers={"Authorization": f"Bearer {MP_ACCESS_TOKEN}"},
+                    json={
+                        "items": [{
+                            "title": label,
+                            "quantity": 1,
+                            "unit_price": amount,
+                            "currency_id": "CLP",
+                        }],
+                        "external_reference": up_id,
+                        "notification_url": f"{host_url}/api/webhook/mercadopago",
+                        "back_urls": {
+                            "success": f"{origin}/upgrade-success?tx={up_id}",
+                            "pending": f"{origin}/upgrade-success?tx={up_id}",
+                            "failure": f"{origin}/",
+                        },
+                        "auto_return": "approved",
+                        "payer": {"email": email},
+                    },
+                )
+                res.raise_for_status()
+                data = res.json()
+                doc["mp_preference_id"] = data.get("id")
+                await db.payment_transactions.insert_one(doc)
+                return {"url": data["init_point"], "tx_id": up_id}
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"MP: {e}")
+
+    raise HTTPException(status_code=400, detail=f"Provider '{body.provider}' no soportado para upgrade aún")
+
+
+class VerifyEmailRequest(BaseModel):
+    device_id: str
+    email: str
+
+
+@api_router.post("/payments/verify-email")
+async def verify_email(body: VerifyEmailRequest):
+    """Verifica que el email coincide con el que compró en ESTE dispositivo.
+    Renueva la sesión por 30 días. NO usa código."""
+    email = body.email.strip().lower()
     if not re.match(r"^\S+@\S+\.\S+$", email):
         raise HTTPException(status_code=400, detail="Email inválido")
-    if len(code) != ACCESS_CODE_LENGTH or not code.isdigit():
-        raise HTTPException(status_code=400, detail=f"Código debe ser de {ACCESS_CODE_LENGTH} dígitos")
 
-    # Buscar la compra ligada a este dispositivo
     paid = await db.payment_transactions.find_one(
         {"device_id": body.device_id, "email": email, "payment_status": "paid"}
     )
     if paid:
-        # Grants manuales pueden usar cualquier código válido guardado, o entrar sin código.
-        expected = str(paid.get("access_code") or "").strip()
-        if paid.get("provider") == "manual" or (expected and code == expected):
-            now = datetime.now(timezone.utc).isoformat()
-            await db.payment_transactions.update_one(
-                {"id": paid["id"]}, {"$set": {"last_verified_at": now}}
-            )
-            return {"verified": True, "reason": "purchaser", "session_ttl_hours": SESSION_TTL_HOURS}
-        return {"verified": False, "reason": "code_invalid"}
+        now = datetime.now(timezone.utc).isoformat()
+        await db.payment_transactions.update_one(
+            {"id": paid["id"]}, {"$set": {"last_verified_at": now}}
+        )
+        return {"verified": True, "reason": "purchaser", "session_ttl_hours": SESSION_TTL_HOURS}
 
-    # Si no es comprador directo, ¿es un grant en el mismo dispositivo?
     grant = await db.access_grants.find_one({"device_id": body.device_id, "email": email})
     if grant:
         source = await db.payment_transactions.find_one({"id": grant.get("source_tx")})
         if source and source.get("payment_status") == "paid":
-            expected = str(source.get("access_code") or "").strip()
-            if source.get("provider") == "manual" or (expected and code == expected):
-                now = datetime.now(timezone.utc).isoformat()
-                await db.access_grants.update_one(
-                    {"device_id": body.device_id}, {"$set": {"verified_at": now}}
-                )
-                return {"verified": True, "reason": "granted", "session_ttl_hours": SESSION_TTL_HOURS}
-            return {"verified": False, "reason": "code_invalid"}
+            now = datetime.now(timezone.utc).isoformat()
+            await db.access_grants.update_one(
+                {"device_id": body.device_id}, {"$set": {"verified_at": now}}
+            )
+            return {"verified": True, "reason": "granted", "session_ttl_hours": SESSION_TTL_HOURS}
+
+    # ¿Existe una compra con este email en OTRO dispositivo?
+    other = await db.payment_transactions.find_one({"email": email, "payment_status": "paid"})
+    if other and other.get("provider") != "manual":
+        return {
+            "verified": False,
+            "reason": "wrong_device",
+            "message": "Esta compra pertenece a otro dispositivo. La app se usa solo en el dispositivo que pagó.",
+        }
     return {"verified": False, "reason": "no_payment"}
 
 
@@ -443,11 +686,12 @@ async def my_purchase_info(device_id: str):
 
     return {
         "email": paid.get("email"),
-        "access_code": paid.get("access_code"),
-        "whatsapp_phone": paid.get("whatsapp_phone", ""),
-        "max_devices": paid.get("max_devices", MAX_DEVICES_PER_PAYMENT),
         "session_ttl_hours": SESSION_TTL_HOURS,
         "last_verified_at": paid.get("last_verified_at") or paid.get("paid_at"),
+        "owned_packages": paid.get("owned_packages") or [],
+        "all_routes_unlocked": bool(paid.get("all_routes_unlocked")),
+        "raffle_participating": bool(paid.get("raffle_participating")),
+        "raffle_code": paid.get("raffle_code"),
     }
 
 

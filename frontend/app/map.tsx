@@ -21,9 +21,11 @@ import IslandMap from "@/src/components/IslandMap";
 import VaiBanner from "@/src/components/VaiBanner";
 import { useUserLocation } from "@/src/hooks/use-user-location";
 import {
+  PackageInfo,
   RouteData,
   WaterPoint,
-  checkAccess,
+  checkAccessDetailed,
+  fetchPackages,
   fetchRoutes,
   fetchWaterPoints,
   getDeviceId,
@@ -53,6 +55,9 @@ export default function MapScreen() {
 
   const [routes, setRoutes] = useState<RouteData[]>([]);
   const [waterPoints, setWaterPoints] = useState<WaterPoint[]>([]);
+  const [ownedPackages, setOwnedPackages] = useState<string[]>([]);
+  const [allUnlocked, setAllUnlocked] = useState<boolean>(false);
+  const [packages, setPackages] = useState<PackageInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [filter, setFilter] = useState<Filter>("todas");
@@ -72,16 +77,44 @@ export default function MapScreen() {
       const paid = await getLocalPaid();
       if (!paid) {
         const deviceId = await getDeviceId();
-        const hasAccess = await checkAccess(deviceId);
-        if (!hasAccess) {
+        const detailed = await checkAccessDetailed(deviceId);
+        if (!detailed.has_access) {
           router.replace("/");
           return;
         }
         await setLocalPaid();
+        if (detailed.needs_package_selection) {
+          router.replace("/select-package");
+          return;
+        }
+        setOwnedPackages(detailed.owned_packages || []);
+        setAllUnlocked(!!detailed.all_routes_unlocked);
+      } else {
+        try {
+          const deviceId = await getDeviceId();
+          const detailed = await checkAccessDetailed(deviceId);
+          if (detailed.needs_verification) {
+            router.replace("/");
+            return;
+          }
+          if (detailed.needs_package_selection) {
+            router.replace("/select-package");
+            return;
+          }
+          setOwnedPackages(detailed.owned_packages || []);
+          setAllUnlocked(!!detailed.all_routes_unlocked);
+        } catch {
+          /* offline: usar todo lo disponible */
+        }
       }
-      const [r, w] = await Promise.all([fetchRoutes(), fetchWaterPoints()]);
+      const [r, w, pkgRes] = await Promise.all([
+        fetchRoutes(),
+        fetchWaterPoints(),
+        fetchPackages().catch(() => ({ packages: [] as PackageInfo[], prices: undefined })),
+      ]);
       setRoutes(r);
       setWaterPoints(w);
+      setPackages(pkgRes.packages || []);
     } catch {
       setError(true);
     } finally {
@@ -97,10 +130,23 @@ export default function MapScreen() {
     if (params.selected) setSelectedRouteId(params.selected);
   }, [params.selected]);
 
-  const filtered = useMemo(
-    () => (filter === "todas" ? routes : routes.filter((r) => r.type === filter)),
-    [routes, filter],
-  );
+  const allowedRouteIds = useMemo(() => {
+    if (allUnlocked) return null; // null = todas permitidas
+    const allowed = new Set<string>();
+    for (const pkg of packages) {
+      if (ownedPackages.includes(pkg.id)) {
+        for (const r of pkg.routes) allowed.add(r.id);
+      }
+    }
+    return allowed;
+  }, [allUnlocked, ownedPackages, packages]);
+
+  const filtered = useMemo(() => {
+    const byPackage = allowedRouteIds
+      ? routes.filter((r) => allowedRouteIds.has(r.id))
+      : routes;
+    return filter === "todas" ? byPackage : byPackage.filter((r) => r.type === filter);
+  }, [routes, filter, allowedRouteIds]);
 
   const selectedRoute = routes.find((r) => r.id === selectedRouteId);
 

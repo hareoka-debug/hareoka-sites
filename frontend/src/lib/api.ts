@@ -84,6 +84,11 @@ export interface AccessInfo {
   email?: string;
   is_purchaser?: boolean;
   needs_verification?: boolean;
+  owned_packages?: string[];
+  all_routes_unlocked?: boolean;
+  raffle_participating?: boolean;
+  raffle_code?: string;
+  needs_package_selection?: boolean;
 }
 
 export async function checkAccess(deviceId: string): Promise<boolean> {
@@ -97,11 +102,12 @@ export async function checkAccessDetailed(deviceId: string): Promise<AccessInfo>
 
 export interface MyPurchaseInfo {
   email: string;
-  access_code: string;
-  whatsapp_phone: string;
-  max_devices: number;
   session_ttl_hours: number;
   last_verified_at: string | null;
+  owned_packages: string[];
+  all_routes_unlocked: boolean;
+  raffle_participating: boolean;
+  raffle_code?: string | null;
 }
 
 export async function fetchMyPurchaseInfo(deviceId: string): Promise<MyPurchaseInfo | null> {
@@ -111,21 +117,18 @@ export async function fetchMyPurchaseInfo(deviceId: string): Promise<MyPurchaseI
   return res.json();
 }
 
-export interface VerifyCodeResult {
+export interface VerifyResult {
   verified: boolean;
-  reason?: "purchaser" | "granted" | "code_invalid" | "no_payment";
+  reason?: "purchaser" | "granted" | "no_payment" | "wrong_device";
+  message?: string;
   session_ttl_hours?: number;
 }
 
-export async function verifyAccessCode(
-  deviceId: string,
-  email: string,
-  accessCode: string,
-): Promise<VerifyCodeResult> {
-  const res = await fetch(`${BASE}/api/payments/verify-code`, {
+export async function verifyEmailOnly(deviceId: string, email: string): Promise<VerifyResult> {
+  const res = await fetch(`${BASE}/api/payments/verify-email`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ device_id: deviceId, email, access_code: accessCode }),
+    body: JSON.stringify({ device_id: deviceId, email }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => null);
@@ -134,15 +137,66 @@ export async function verifyAccessCode(
   return res.json();
 }
 
-export async function releaseDevice(deviceId: string, targetDeviceId: string): Promise<boolean> {
-  const res = await fetch(`${BASE}/api/payments/release-device`, {
+// ---------------- Paquetes ----------------
+export interface PackageInfo {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  route_count: number;
+  routes: { id: string; name: string; difficulty?: string; photo?: string }[];
+}
+export interface PackagesResponse {
+  packages: PackageInfo[];
+  prices: { base_clp: number; extra_package_clp: number; all_routes_clp: number };
+}
+
+export async function fetchPackages(): Promise<PackagesResponse> {
+  return get<PackagesResponse>("/packages");
+}
+
+export async function selectPackage(
+  deviceId: string,
+  email: string,
+  packageId: string,
+): Promise<{ selected?: string; already_selected?: boolean; owned_packages: string[] }> {
+  const res = await fetch(`${BASE}/api/payments/select-package`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ device_id: deviceId, target_device_id: targetDeviceId }),
+    body: JSON.stringify({ device_id: deviceId, email, package_id: packageId }),
   });
-  if (!res.ok) return false;
-  const data = await res.json();
-  return !!data.released;
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function createUpgradeCheckout(
+  deviceId: string,
+  email: string,
+  kind: "package" | "all",
+  originUrl: string,
+  packageId?: string,
+  provider: string = "mercadopago",
+): Promise<{ url: string; tx_id: string }> {
+  const res = await fetch(`${BASE}/api/payments/upgrade-checkout`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      device_id: deviceId,
+      email,
+      kind,
+      package_id: packageId || null,
+      provider,
+      origin_url: originUrl,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.detail || `Error ${res.status}`);
+  }
+  return res.json();
 }
 
 export interface Providers {
@@ -159,7 +213,6 @@ export async function createCheckout(
   originUrl: string,
   provider: string,
   email?: string,
-  whatsappPhone?: string,
 ) {
   const res = await fetch(`${BASE}/api/payments/checkout`, {
     method: "POST",
@@ -169,7 +222,6 @@ export async function createCheckout(
       origin_url: originUrl,
       provider,
       email,
-      whatsapp_phone: whatsappPhone,
     }),
   });
   if (!res.ok) {
