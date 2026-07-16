@@ -322,22 +322,16 @@ async def _mark_paid(query: dict):
             return
         owned = parent.get("owned_packages") or []
         if upgrade_kind == "all":
-            # Desbloquear todos + generar código de sorteo
-            raffle_code = f"RAPA-{secrets.token_hex(3).upper()}"
+            # Desbloquear todos los paquetes
             all_pkg_ids = [p["id"] for p in PACKAGES]
             await db.payment_transactions.update_one(
                 {"id": parent["id"]},
                 {"$set": {
                     "owned_packages": all_pkg_ids,
                     "all_routes_unlocked": True,
-                    "raffle_code": raffle_code,
-                    "raffle_participating": True,
-                    "raffle_registered_at": now,
                 }},
             )
-            logger.info(
-                f"🎁 Sorteo camiseta: {parent.get('email')} tiene código {raffle_code}"
-            )
+            logger.info(f"✅ Cliente {parent.get('email')} desbloqueó las 11 rutas ($5.000)")
         elif upgrade_kind == "package" and result.get("target_package"):
             new_pkg = result["target_package"]
             if new_pkg not in owned:
@@ -437,8 +431,6 @@ async def check_access(device_id: str):
             "is_purchaser": True,
             "owned_packages": paid.get("owned_packages") or [],
             "all_routes_unlocked": bool(paid.get("all_routes_unlocked")),
-            "raffle_participating": bool(paid.get("raffle_participating")),
-            "raffle_code": paid.get("raffle_code"),
             "needs_package_selection": not (paid.get("owned_packages") or [])
                 and not paid.get("all_routes_unlocked"),
         }
@@ -459,7 +451,6 @@ async def check_access(device_id: str):
                 "is_purchaser": False,
                 "owned_packages": source.get("owned_packages") or [],
                 "all_routes_unlocked": bool(source.get("all_routes_unlocked")),
-                "raffle_participating": bool(source.get("raffle_participating")),
                 "needs_package_selection": not (source.get("owned_packages") or [])
                     and not source.get("all_routes_unlocked"),
             }
@@ -689,8 +680,6 @@ async def my_purchase_info(device_id: str):
         "last_verified_at": paid.get("last_verified_at") or paid.get("paid_at"),
         "owned_packages": paid.get("owned_packages") or [],
         "all_routes_unlocked": bool(paid.get("all_routes_unlocked")),
-        "raffle_participating": bool(paid.get("raffle_participating")),
-        "raffle_code": paid.get("raffle_code"),
     }
 
 
@@ -1290,9 +1279,21 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
-async def seed_water_points():
+async def seed_startup_data():
+    # Sembrar rutas si la colección está vacía
+    if await db.routes.count_documents({}) == 0:
+        try:
+            await db.routes.insert_many([{**r} for r in ROUTES])
+            logger.info(f"✅ Seeded {len(ROUTES)} routes into MongoDB")
+        except Exception as e:
+            logger.error(f"Error seeding routes: {e}")
+    # Sembrar puntos de agua vai si están vacíos
     if await db.water_points.count_documents({}) == 0:
-        await db.water_points.insert_many([{**w} for w in WATER_POINTS])
+        try:
+            await db.water_points.insert_many([{**w} for w in WATER_POINTS])
+            logger.info(f"✅ Seeded {len(WATER_POINTS)} water points into MongoDB")
+        except Exception as e:
+            logger.error(f"Error seeding water points: {e}")
 
 
 @app.on_event("shutdown")

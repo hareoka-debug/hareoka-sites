@@ -157,8 +157,7 @@ export default function SelectPackage() {
         <Feather name="gift" size={14} color={colors.warning} />
         <Text style={styles.hintText}>
           ¿Quieres verlas todas? Después de elegir, desde el mapa puedes desbloquear otro paquete
-          por $3.000 más, o desbloquear las 11 rutas por solo $5.000 y participar en el sorteo de
-          una camiseta exclusiva de Rapa Nui.
+          por $3.000 más, o desbloquear las 11 rutas de una vez por solo $5.000.
         </Text>
       </View>
     </ScrollView>

@@ -315,9 +315,24 @@ export default function MapScreen() {
           delayLongPress={800}
           testID="header-chip"
         >
-          <Text style={styles.headerTitle}>Rutas Rapa Nui</Text>
-          <Text style={styles.headerSub}>{routes.length} rutas · Isla de Pascua</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>Rutas Rapa Nui</Text>
+          <Text style={styles.headerSub} numberOfLines={1}>
+            {filtered.length}{allUnlocked ? "" : `/${routes.length}`} rutas
+          </Text>
         </Pressable>
+        {!allUnlocked && (
+          <Pressable
+            style={styles.unlockBtn}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/upgrade");
+            }}
+            testID="unlock-more"
+          >
+            <Feather name="unlock" size={14} color={colors.onBrand} />
+            <Text style={styles.unlockText}>Más rutas</Text>
+          </Pressable>
+        )}
         <Pressable
           style={styles.shareBtn}
           onPress={() => {
@@ -326,7 +341,7 @@ export default function MapScreen() {
           }}
           testID="share-button"
         >
-          <FontAwesome name="whatsapp" size={22} color="#fff" />
+          <FontAwesome name="whatsapp" size={20} color="#fff" />
         </Pressable>
       </View>
 
@@ -442,20 +457,34 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   shareBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: "#25D366",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "#1DA851",
   },
+  unlockBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brand,
+  },
+  unlockText: {
+    color: colors.onBrand,
+    fontSize: 12,
+    fontWeight: "700",
+  },
   headerChip: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
     alignSelf: "flex-start",

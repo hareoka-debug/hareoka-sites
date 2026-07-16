@@ -86,8 +86,6 @@ export interface AccessInfo {
   needs_verification?: boolean;
   owned_packages?: string[];
   all_routes_unlocked?: boolean;
-  raffle_participating?: boolean;
-  raffle_code?: string;
   needs_package_selection?: boolean;
 }
 
@@ -106,8 +104,6 @@ export interface MyPurchaseInfo {
   last_verified_at: string | null;
   owned_packages: string[];
   all_routes_unlocked: boolean;
-  raffle_participating: boolean;
-  raffle_code?: string | null;
 }
 
 export async function fetchMyPurchaseInfo(deviceId: string): Promise<MyPurchaseInfo | null> {

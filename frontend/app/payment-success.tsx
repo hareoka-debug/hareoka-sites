@@ -95,7 +95,7 @@ export default function PaymentSuccess() {
           <Text style={styles.title}>¡Iorana! Pago exitoso</Text>
           <Text style={styles.sub}>
             Ya tienes acceso a la guía en este dispositivo. Vas a poder usarla para descubrir Rapa Nui.
-            Escoge tu ruta. Si las abres todas, disfruta y participa por una camiseta exclusiva 🎁.
+            Escoge tu paquete de rutas. Cuando quieras, puedes desbloquear más paquetes o todas las rutas.
           </Text>
 
           <View style={styles.infoCard}>
