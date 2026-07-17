@@ -1239,6 +1239,21 @@ if _FRONTEND_DIST.exists() and (_FRONTEND_DIST / "index.html").exists():
     # para que expo-router maneje la navegación.
     # NO usamos un mount separado para /assets porque en el deploy la carpeta
     # puede no viajar correctamente; con este catchall siempre funciona.
+    #
+    # NOTA IMPORTANTE (fuentes vector-icons):
+    #   En algunos entornos de deploy, los `.ttf` bajo
+    #   `assets/node_modules/@expo/vector-icons/...` no se copian (la
+    #   infraestructura los filtra por contener "node_modules"). Cuando esto
+    #   ocurre, redirigimos la request al CDN público de jsDelivr para que los
+    #   iconos siempre carguen correctamente en producción.
+    import re as _re_ttf
+    _VECTOR_ICON_TTF = _re_ttf.compile(
+        r"^assets/node_modules/@expo/vector-icons/build/vendor/"
+        r"react-native-vector-icons/Fonts/([A-Za-z0-9_]+)\."
+        r"[a-f0-9]+\.ttf$"
+    )
+    _VECTOR_ICONS_CDN_VERSION = "15.1.1"
+
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str):
         # No interceptar rutas del API
@@ -1258,6 +1273,17 @@ if _FRONTEND_DIST.exists() and (_FRONTEND_DIST / "index.html").exists():
             elif ext == ".otf":
                 media_type = "font/otf"
             return FileResponse(target, media_type=media_type)
+        # Fallback CDN para fuentes de @expo/vector-icons: si el .ttf no está
+        # en disco (deploy filtró node_modules), redirigimos al CDN público.
+        _m = _VECTOR_ICON_TTF.match(full_path)
+        if _m:
+            _font_name = _m.group(1)
+            _cdn_url = (
+                f"https://cdn.jsdelivr.net/npm/@expo/vector-icons@"
+                f"{_VECTOR_ICONS_CDN_VERSION}/build/vendor/"
+                f"react-native-vector-icons/Fonts/{_font_name}.ttf"
+            )
+            return RedirectResponse(url=_cdn_url, status_code=302)
         # Si el path incluye una extensión de archivo (fuente/imagen/js) y no existe → 404 real
         if "." in full_path.split("/")[-1]:
             raise HTTPException(status_code=404, detail="Not Found")
