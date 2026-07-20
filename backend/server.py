@@ -654,7 +654,24 @@ async def verify_email(body: VerifyEmailRequest):
 
     # ¿Existe una compra con este email en OTRO dispositivo?
     other = await db.payment_transactions.find_one({"email": email, "payment_status": "paid"})
-    if other and other.get("provider") != "manual":
+    if other:
+        # Los grants manuales del admin permiten vincular este dispositivo
+        # (útil cuando el admin otorga acceso y el cliente restaura desde
+        # su navegador). Compras reales de pago quedan bloqueadas 1:1.
+        if other.get("provider") == "manual":
+            now = datetime.now(timezone.utc).isoformat()
+            await db.access_grants.update_one(
+                {"device_id": body.device_id},
+                {"$set": {
+                    "device_id": body.device_id,
+                    "email": email,
+                    "source_tx": other["id"],
+                    "granted_at": now,
+                    "verified_at": now,
+                }},
+                upsert=True,
+            )
+            return {"verified": True, "reason": "granted", "session_ttl_hours": SESSION_TTL_HOURS}
         return {
             "verified": False,
             "reason": "wrong_device",
