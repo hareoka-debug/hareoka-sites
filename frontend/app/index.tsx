@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -34,6 +35,9 @@ import {
 } from "@/src/lib/api";
 import { storage } from "@/src/utils/storage";
 import { colors, radius, serif, spacing } from "@/src/lib/theme";
+
+const HERO_IMAGE =
+  "https://images.unsplash.com/photo-1597240890437-6d9c2d4c16aa?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NDh8MHwxfHNlYXJjaHwxfHxFYXN0ZXIlMjBJc2xhbmQlMjBNb2FpJTIwc3RhdHVlJTIwbGFuZHNjYXBlfGVufDB8fHx8MTc4MzI4MzEyNXww&ixlib=rb-4.1.0&q=85";
 
 const METHODS: { key: string; label: string; sub: string; icon: any }[] = [
   { key: "mercadopago", label: "Mercado Pago", sub: "Tarjetas, saldo MP", icon: "smartphone" },
@@ -218,15 +222,22 @@ export default function Hub() {
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <ScrollView
         contentContainerStyle={{
-          paddingTop: insets.top + spacing.xl,
           paddingBottom: insets.bottom + spacing.xxxl,
-          paddingHorizontal: spacing.lg,
         }}
       >
+        {/* Imagen hero de moais */}
+        <View style={styles.hero}>
+          <Image source={{ uri: HERO_IMAGE }} style={styles.heroImg} contentFit="cover" />
+          <View style={styles.heroOverlay} />
+          <View style={[styles.heroContent, { paddingTop: insets.top + spacing.xxl }]}>
+            <Text style={styles.heroEyebrow}>GUÍA DE ISLA DE PASCUA</Text>
+            <Text style={styles.heroTitle}>Descubre{"\n"}Rapa Nui</Text>
+          </View>
+        </View>
+
+        <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xl }}>
         {/* Encabezado */}
         <View style={styles.header}>
-          <Text style={styles.eyebrow}>GUÍA DE ISLA DE PASCUA</Text>
-          <Text style={styles.title}>Descubre{"\n"}Rapa Nui</Text>
           <Text style={styles.subtitle}>
             Elige el contenido que quieres desbloquear. Cada compra es única: 1 email, 1 dispositivo, 30 días de acceso.
           </Text>
@@ -303,6 +314,7 @@ export default function Hub() {
         <Text style={styles.footer}>
           Pago único por dispositivo · Pago seguro · Sin suscripciones
         </Text>
+        </View>
       </ScrollView>
 
       {/* MODAL COMPRA */}
@@ -452,6 +464,37 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   loadingText: { color: colors.onSurfaceTertiary, fontSize: 13 },
+  hero: {
+    height: 260,
+    position: "relative",
+    marginBottom: 0,
+  },
+  heroImg: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(43, 58, 66, 0.35)",
+  },
+  heroContent: {
+    flex: 1,
+    paddingHorizontal: spacing.lg,
+    justifyContent: "flex-end",
+    paddingBottom: spacing.lg,
+  },
+  heroEyebrow: {
+    color: "#FFD9B8",
+    fontSize: 11,
+    letterSpacing: 2,
+    fontWeight: "700",
+    marginBottom: spacing.sm,
+  },
+  heroTitle: {
+    fontFamily: serif,
+    fontSize: 40,
+    lineHeight: 44,
+    color: "#FFFFFF",
+  },
   header: { marginBottom: spacing.xl },
   eyebrow: {
     color: colors.brand,
