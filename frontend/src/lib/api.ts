@@ -94,8 +94,11 @@ export const fetchWaterPoints = () => get<WaterPoint[]>("/water-points");
 export interface Product {
   id: string;
   name: string;
+  name_en?: string;
   short: string;
+  short_en?: string;
   description: string;
+  description_en?: string;
   amount_clp: number;
   kind: "routes" | "info" | "media";
   route_ids?: string[] | "*";

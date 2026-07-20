@@ -52,7 +52,7 @@ const PRODUCT_IMAGE: Record<string, string> = {
   rentcars:
     "https://images.unsplash.com/photo-1577739156682-d3a82b8dea28?crop=entropy&cs=srgb&fm=jpg&q=85",
   song:
-    "https://images.unsplash.com/photo-1756382616831-998e8baf9675?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "https://images.unsplash.com/photo-1518709594023-6eab9bab7b23?crop=entropy&cs=srgb&fm=jpg&q=85",
   emergencies:
     "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?crop=entropy&cs=srgb&fm=jpg&q=85",
 };
@@ -248,10 +248,14 @@ export default function Hub() {
           <Image source={{ uri: HERO_IMAGE }} style={styles.heroImg} contentFit="cover" />
           <View style={styles.heroOverlay} />
           <View style={[styles.heroContent, { paddingTop: insets.top + spacing.xxl }]}>
-            <Text style={styles.heroEyebrow}>GUÍA DE ISLA DE PASCUA</Text>
+            <Text style={styles.heroEyebrow}>GUÍA DE ISLA DE PASCUA · EASTER ISLAND GUIDE</Text>
             <Text style={styles.heroTitle}>Descubre{"\n"}Rapa Nui</Text>
+            <Text style={styles.heroTitleEn}>Discover Rapa Nui</Text>
             <Text style={styles.heroTagline}>
               Elige el contenido que quieres desbloquear y vive la experiencia
+            </Text>
+            <Text style={styles.heroTaglineEn}>
+              Choose what you want to unlock and live the experience
             </Text>
           </View>
         </View>
@@ -305,15 +309,21 @@ export default function Hub() {
                 )}
               </View>
               <View style={styles.cardBody}>
-                <Text style={styles.cardName} numberOfLines={1}>
+                <Text style={styles.cardName} numberOfLines={2}>
                   {p.name}
                 </Text>
+                {p.name_en ? (
+                  <Text style={styles.cardNameEn} numberOfLines={2}>
+                    {p.name_en}
+                  </Text>
+                ) : null}
                 <Text style={styles.cardShort} numberOfLines={2}>
                   {p.short}
+                  {p.short_en ? `  ·  ${p.short_en}` : ""}
                 </Text>
                 <View style={styles.cardAction}>
                   <Text style={[styles.cardActionText, { color: p.color }]}>
-                    {owned || isFree ? "Ver contenido" : "Comprar acceso"}
+                    {owned || isFree ? "Ver contenido · View" : "Comprar acceso · Buy"}
                   </Text>
                   <Feather name="chevron-right" size={16} color={p.color} />
                 </View>
@@ -333,11 +343,19 @@ export default function Hub() {
           testID="restore-button"
         >
           <Feather name="key" size={14} color={colors.onSurfaceSecondary} />
-          <Text style={styles.restoreText}>¿Ya pagaste antes? Restaurar acceso con tu email</Text>
+          <Text style={styles.restoreText}>
+            ¿Ya pagaste antes? Restaurar acceso con tu email
+          </Text>
         </Pressable>
+        <Text style={styles.restoreTextEn}>
+          Already paid? Restore access with your email
+        </Text>
 
         <Text style={styles.footer}>
           Pago único por dispositivo · Pago seguro · Sin suscripciones
+        </Text>
+        <Text style={styles.footerEn}>
+          One-time payment per device · Secure payment · No subscriptions
         </Text>
         </View>
       </ScrollView>
@@ -361,11 +379,17 @@ export default function Hub() {
               </Pressable>
             </View>
             <Text style={styles.modalDesc}>{buying?.description}</Text>
+            {buying?.description_en ? (
+              <Text style={styles.modalDescEn}>{buying.description_en}</Text>
+            ) : null}
             <Text style={styles.modalPrice}>
-              Precio: <Text style={{ fontWeight: "800" }}>${buying?.amount_clp.toLocaleString("es-CL")} CLP</Text>
+              Precio · Price:{" "}
+              <Text style={{ fontWeight: "800" }}>
+                ${buying?.amount_clp.toLocaleString("es-CL")} CLP
+              </Text>
             </Text>
 
-            <Text style={styles.label}>Elige medio de pago</Text>
+            <Text style={styles.label}>Elige medio de pago · Choose payment</Text>
             <View style={styles.methods}>
               {METHODS.map((m) => {
                 const enabled = providers?.[m.key as keyof Providers] !== false;
@@ -395,7 +419,7 @@ export default function Hub() {
               })}
             </View>
 
-            <Text style={styles.label}>Tu email (para respaldar tu compra)</Text>
+            <Text style={styles.label}>Tu email (para respaldar tu compra) · Your email</Text>
             <TextInput
               value={buyEmail}
               onChangeText={setBuyEmail}
@@ -418,12 +442,16 @@ export default function Hub() {
                 <ActivityIndicator color={colors.onBrand} />
               ) : (
                 <Text style={styles.payBtnText}>
-                  Pagar ${buying?.amount_clp.toLocaleString("es-CL")} CLP
+                  Pagar · Pay ${buying?.amount_clp.toLocaleString("es-CL")} CLP
                 </Text>
               )}
             </Pressable>
             <Text style={styles.modalHint}>
               Se abrirá la página segura de {METHODS.find((x) => x.key === buyMethod)?.label}. Al volver, tu acceso queda activo.
+              {"\n"}
+              <Text style={{ fontStyle: "italic" }}>
+                You will be redirected to {METHODS.find((x) => x.key === buyMethod)?.label}. When you return, your access is active.
+              </Text>
             </Text>
           </View>
         </KeyboardAvoidingView>
@@ -442,13 +470,16 @@ export default function Hub() {
         >
           <View style={styles.modalBox}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Restaurar acceso</Text>
+              <Text style={styles.modalTitle}>Restaurar acceso · Restore access</Text>
               <Pressable onPress={() => setShowRestore(false)} hitSlop={16} style={styles.modalCloseBtn} testID="close-restore">
                 <Feather name="x" size={20} color={colors.onSurface} />
               </Pressable>
             </View>
             <Text style={styles.modalDesc}>
               Ingresa el email con el que pagaste. Renovamos tu sesión por 30 días en este dispositivo.
+            </Text>
+            <Text style={styles.modalDescEn}>
+              Enter the email you paid with. We renew your session for 30 days on this device.
             </Text>
             <TextInput
               value={restoreEmail}
@@ -470,7 +501,7 @@ export default function Hub() {
               {restoreBusy ? (
                 <ActivityIndicator color={colors.onBrand} />
               ) : (
-                <Text style={styles.payBtnText}>Verificar y entrar</Text>
+                <Text style={styles.payBtnText}>Verificar y entrar · Verify & enter</Text>
               )}
             </Pressable>
           </View>
@@ -520,6 +551,13 @@ const styles = StyleSheet.create({
     lineHeight: 44,
     color: "#FFFFFF",
   },
+  heroTitleEn: {
+    fontFamily: serif,
+    fontStyle: "italic",
+    fontSize: 18,
+    color: "#FFD9B8",
+    marginTop: 2,
+  },
   heroTagline: {
     marginTop: spacing.md,
     fontSize: 15,
@@ -529,6 +567,13 @@ const styles = StyleSheet.create({
     maxWidth: 340,
     textShadowColor: "rgba(0,0,0,0.35)",
     textShadowRadius: 6,
+  },
+  heroTaglineEn: {
+    marginTop: 4,
+    fontSize: 12,
+    fontStyle: "italic",
+    color: "rgba(255,255,255,0.85)",
+    maxWidth: 340,
   },
   header: { marginBottom: spacing.md },
   eyebrow: {
@@ -603,6 +648,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   cardName: { fontSize: 17, fontWeight: "700", color: colors.onSurface },
+  cardNameEn: {
+    fontSize: 13,
+    fontStyle: "italic",
+    color: colors.onSurfaceSecondary,
+    marginTop: 1,
+  },
   cardShort: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 2, marginBottom: 6 },
   cardAction: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
   cardActionText: { fontSize: 14, fontWeight: "700" },
@@ -635,10 +686,24 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   restoreText: { fontSize: 13, color: colors.onSurfaceSecondary, textDecorationLine: "underline" },
+  restoreTextEn: {
+    marginTop: 2,
+    textAlign: "center",
+    fontSize: 11,
+    fontStyle: "italic",
+    color: colors.onSurfaceTertiary,
+  },
   footer: {
     marginTop: spacing.md,
     textAlign: "center",
     fontSize: 11,
+    color: colors.onSurfaceTertiary,
+  },
+  footerEn: {
+    marginTop: 2,
+    textAlign: "center",
+    fontSize: 10,
+    fontStyle: "italic",
     color: colors.onSurfaceTertiary,
   },
 
@@ -670,6 +735,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   modalDesc: { fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 19 },
+  modalDescEn: {
+    fontSize: 12,
+    color: colors.onSurfaceTertiary,
+    fontStyle: "italic",
+    lineHeight: 17,
+  },
   modalPrice: { fontSize: 14, color: colors.onSurface },
   label: {
     fontSize: 11,
