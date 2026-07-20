@@ -25,16 +25,28 @@ export function ContentListScreen({ title, subtitle, icon, color, loading, locke
   const insets = useSafeAreaInsets();
 
   const goBack = () => {
-    if (onBack) onBack();
-    else if (router.canGoBack()) router.back();
-    else router.replace("/");
+    if (onBack) {
+      onBack();
+      return;
+    }
+    // En web / entrada directa el historial puede no existir; siempre garantizamos volver al hub.
+    try {
+      if (router.canGoBack()) {
+        router.back();
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    router.replace("/");
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <Pressable onPress={goBack} hitSlop={12} style={styles.backBtn} testID="back">
-          <Feather name="arrow-left" size={22} color={colors.onSurface} />
+          <Feather name="arrow-left" size={20} color={colors.onSurface} />
+          <Text style={styles.backBtnText}>Volver</Text>
         </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle} numberOfLines={1}>
@@ -162,7 +174,19 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     backgroundColor: colors.surface,
   },
-  backBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginLeft: -8 },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    height: 44,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginLeft: -4,
+  },
+  backBtnText: { fontSize: 13, fontWeight: "600", color: colors.onSurface },
   headerTitle: { fontFamily: serif, fontSize: 22, color: colors.onSurface },
   headerSub: { fontSize: 12, color: colors.onSurfaceTertiary },
   headerIcon: {

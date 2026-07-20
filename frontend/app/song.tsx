@@ -51,11 +51,23 @@ export default function SongScreen() {
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <Pressable
-          onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+          onPress={() => {
+            try {
+              if (router.canGoBack()) {
+                router.back();
+                return;
+              }
+            } catch {
+              /* ignore */
+            }
+            router.replace("/");
+          }}
           hitSlop={12}
           style={styles.backBtn}
+          testID="song-back"
         >
-          <Feather name="arrow-left" size={22} color={colors.onSurface} />
+          <Feather name="arrow-left" size={20} color={colors.onSurface} />
+          <Text style={styles.backBtnText}>Volver</Text>
         </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Canción Rapa Nui</Text>
@@ -122,7 +134,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  backBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginLeft: -8 },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    height: 44,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginLeft: -4,
+  },
+  backBtnText: { fontSize: 13, fontWeight: "600", color: colors.onSurface },
   headerTitle: { fontFamily: serif, fontSize: 22, color: colors.onSurface },
   headerSub: { fontSize: 12, color: colors.onSurfaceTertiary },
   headerIcon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },

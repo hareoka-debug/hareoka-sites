@@ -39,6 +39,24 @@ import { colors, radius, serif, spacing } from "@/src/lib/theme";
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1597240890437-6d9c2d4c16aa?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NDh8MHwxfHNlYXJjaHwxfHxFYXN0ZXIlMjBJc2xhbmQlMjBNb2FpJTIwc3RhdHVlJTIwbGFuZHNjYXBlfGVufDB8fHx8MTc4MzI4MzEyNXww&ixlib=rb-4.1.0&q=85";
 
+// Imagen de banner por producto (se muestra encima de cada tarjeta).
+const PRODUCT_IMAGE: Record<string, string> = {
+  "routes-3":
+    "https://images.unsplash.com/photo-1774343420644-3653b409d609?crop=entropy&cs=srgb&fm=jpg&q=85",
+  "routes-all":
+    "https://images.unsplash.com/photo-1579665063783-77579f0a38a3?crop=entropy&cs=srgb&fm=jpg&q=85",
+  agencies:
+    "https://images.pexels.com/photos/31109688/pexels-photo-31109688.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+  restaurants:
+    "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?crop=entropy&cs=srgb&fm=jpg&q=85",
+  rentcars:
+    "https://images.unsplash.com/photo-1577739156682-d3a82b8dea28?crop=entropy&cs=srgb&fm=jpg&q=85",
+  song:
+    "https://images.unsplash.com/photo-1756382616831-998e8baf9675?crop=entropy&cs=srgb&fm=jpg&q=85",
+  emergencies:
+    "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?crop=entropy&cs=srgb&fm=jpg&q=85",
+};
+
 const METHODS: { key: string; label: string; sub: string; icon: any }[] = [
   { key: "mercadopago", label: "Mercado Pago", sub: "Tarjetas, saldo MP", icon: "smartphone" },
   { key: "flow", label: "Flow", sub: "Webpay, transferencia", icon: "credit-card" },
@@ -232,15 +250,15 @@ export default function Hub() {
           <View style={[styles.heroContent, { paddingTop: insets.top + spacing.xxl }]}>
             <Text style={styles.heroEyebrow}>GUÍA DE ISLA DE PASCUA</Text>
             <Text style={styles.heroTitle}>Descubre{"\n"}Rapa Nui</Text>
+            <Text style={styles.heroTagline}>
+              Elige el contenido que quieres desbloquear y vive la experiencia
+            </Text>
           </View>
         </View>
 
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xl }}>
         {/* Encabezado */}
         <View style={styles.header}>
-          <Text style={styles.subtitle}>
-            Elige el contenido que quieres desbloquear. Cada compra es única: 1 email, 1 dispositivo, 30 días de acceso.
-          </Text>
           {emailKnown ? (
             <View style={styles.emailBadge}>
               <Feather name="check-circle" size={13} color={colors.success} />
@@ -259,30 +277,37 @@ export default function Hub() {
               onPress={() => openProduct(p)}
               style={({ pressed }) => [
                 styles.card,
-                { borderLeftColor: p.color },
-                pressed && { opacity: 0.85 },
+                pressed && { opacity: 0.9 },
               ]}
               testID={`product-${p.id}`}
             >
-              <View style={[styles.cardIcon, { backgroundColor: `${p.color}22` }]}>
-                <Feather name={PRODUCT_ICON[p.id] || "box"} size={22} color={p.color} />
+              <Image
+                source={{ uri: PRODUCT_IMAGE[p.id] }}
+                style={styles.cardImage}
+                contentFit="cover"
+              />
+              <View style={styles.cardImageOverlay} />
+              <View style={styles.cardImageBadges}>
+                <View style={[styles.cardIconMini, { backgroundColor: p.color }]}>
+                  <Feather name={PRODUCT_ICON[p.id] || "box"} size={16} color="#FFFFFF" />
+                </View>
+                {owned || isFree ? (
+                  <View style={[styles.tag, styles.tagOk]}>
+                    <Feather name="unlock" size={11} color={colors.onBrand} />
+                    <Text style={styles.tagOkText}>{isFree ? "GRATIS" : "ACTIVO"}</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.tag, styles.tagPrice]}>
+                    <Text style={styles.tagPriceText}>
+                      ${p.amount_clp.toLocaleString("es-CL")}
+                    </Text>
+                  </View>
+                )}
               </View>
               <View style={styles.cardBody}>
-                <View style={styles.cardTopRow}>
-                  <Text style={styles.cardName} numberOfLines={1}>
-                    {p.name}
-                  </Text>
-                  {owned || isFree ? (
-                    <View style={[styles.tag, styles.tagOk]}>
-                      <Feather name="unlock" size={11} color={colors.onBrand} />
-                      <Text style={styles.tagOkText}>{isFree ? "GRATIS" : "ACTIVO"}</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.tag}>
-                      <Text style={styles.tagText}>${p.amount_clp.toLocaleString("es-CL")}</Text>
-                    </View>
-                  )}
-                </View>
+                <Text style={styles.cardName} numberOfLines={1}>
+                  {p.name}
+                </Text>
                 <Text style={styles.cardShort} numberOfLines={2}>
                   {p.short}
                 </Text>
@@ -331,8 +356,8 @@ export default function Hub() {
           <View style={styles.modalBox}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{buying?.name}</Text>
-              <Pressable onPress={() => setBuying(null)} hitSlop={12}>
-                <Feather name="x" size={22} color={colors.onSurface} />
+              <Pressable onPress={() => setBuying(null)} hitSlop={16} style={styles.modalCloseBtn} testID="close-buy">
+                <Feather name="x" size={20} color={colors.onSurface} />
               </Pressable>
             </View>
             <Text style={styles.modalDesc}>{buying?.description}</Text>
@@ -418,8 +443,8 @@ export default function Hub() {
           <View style={styles.modalBox}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Restaurar acceso</Text>
-              <Pressable onPress={() => setShowRestore(false)} hitSlop={12}>
-                <Feather name="x" size={22} color={colors.onSurface} />
+              <Pressable onPress={() => setShowRestore(false)} hitSlop={16} style={styles.modalCloseBtn} testID="close-restore">
+                <Feather name="x" size={20} color={colors.onSurface} />
               </Pressable>
             </View>
             <Text style={styles.modalDesc}>
@@ -495,7 +520,17 @@ const styles = StyleSheet.create({
     lineHeight: 44,
     color: "#FFFFFF",
   },
-  header: { marginBottom: spacing.xl },
+  heroTagline: {
+    marginTop: spacing.md,
+    fontSize: 15,
+    lineHeight: 21,
+    color: "#F9F8F6",
+    fontWeight: "500",
+    maxWidth: 340,
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowRadius: 6,
+  },
+  header: { marginBottom: spacing.md },
   eyebrow: {
     color: colors.brand,
     fontSize: 11,
@@ -525,41 +560,63 @@ const styles = StyleSheet.create({
   emailBadgeText: { fontSize: 12, color: colors.success, fontWeight: "600" },
 
   card: {
-    flexDirection: "row",
     backgroundColor: "#FFFFFF",
     borderRadius: radius.md,
-    borderLeftWidth: 4,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    gap: spacing.md,
+    marginBottom: spacing.lg,
+    overflow: "hidden",
   },
-  cardIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.md,
+  cardImage: {
+    width: "100%",
+    height: 140,
+  },
+  cardImageOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 140,
+    backgroundColor: "rgba(0,0,0,0.15)",
+  },
+  cardImageBadges: {
+    position: "absolute",
+    top: spacing.sm,
+    left: spacing.sm,
+    right: spacing.sm,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  cardIconMini: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
   },
-  cardBody: { flex: 1, gap: 2 },
+  cardBody: { padding: spacing.md, gap: 4 },
   cardTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.sm,
   },
-  cardName: { flex: 1, fontSize: 16, fontWeight: "700", color: colors.onSurface },
+  cardName: { fontSize: 17, fontWeight: "700", color: colors.onSurface },
   cardShort: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 2, marginBottom: 6 },
-  cardAction: { flexDirection: "row", alignItems: "center", gap: 4 },
-  cardActionText: { fontSize: 13, fontWeight: "700" },
+  cardAction: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
+  cardActionText: { fontSize: 14, fontWeight: "700" },
   tag: {
     paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: radius.pill,
     backgroundColor: colors.surfaceTertiary,
   },
   tagText: { fontSize: 11, fontWeight: "700", color: colors.onSurface },
+  tagPrice: {
+    backgroundColor: "rgba(255,255,255,0.95)",
+  },
+  tagPriceText: { fontSize: 13, fontWeight: "800", color: colors.onSurface },
   tagOk: {
     backgroundColor: colors.success,
     flexDirection: "row",
@@ -604,6 +661,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalTitle: { fontFamily: serif, fontSize: 22, color: colors.onSurface, flex: 1 },
+  modalCloseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceTertiary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   modalDesc: { fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 19 },
   modalPrice: { fontSize: 14, color: colors.onSurface },
   label: {
