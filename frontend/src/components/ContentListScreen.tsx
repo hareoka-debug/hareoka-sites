@@ -18,9 +18,10 @@ type Props = {
   items: ContentItem[];
   emptyMsg?: string;
   onBack?: () => void;
+  showDisclaimer?: boolean;
 };
 
-export function ContentListScreen({ title, subtitle, icon, color, loading, locked, items, emptyMsg, onBack }: Props) {
+export function ContentListScreen({ title, subtitle, icon, color, loading, locked, items, emptyMsg, onBack, showDisclaimer }: Props) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -94,6 +95,19 @@ export function ContentListScreen({ title, subtitle, icon, color, loading, locke
             gap: spacing.md,
           }}
         >
+          {showDisclaimer ? (
+            <View style={styles.disclaimer}>
+              <Feather name="alert-circle" size={14} color={colors.warning} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.disclaimerText}>
+                  Los comercios aquí listados son negocios independientes de la isla, sugeridos con fines informativos. No pertenecen ni están asociados a "Descubre Rapa Nui". Verifica precios, condiciones y disponibilidad directamente con cada uno.
+                </Text>
+                <Text style={styles.disclaimerTextEn}>
+                  The businesses listed here are independent local businesses, suggested for informational purposes. They are not owned by or affiliated with "Descubre Rapa Nui". Confirm prices, conditions and availability directly with each one.
+                </Text>
+              </View>
+            </View>
+          ) : null}
           {items.map((it) => (
             <ItemCard key={it.id} item={it} color={color} />
           ))}
@@ -253,4 +267,28 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   actionText: { fontSize: 12, fontWeight: "600", color: colors.brand },
+
+  disclaimer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    padding: spacing.md,
+    backgroundColor: "#FFF7E6",
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: "#F4C77A",
+    marginTop: spacing.sm,
+  },
+  disclaimerText: {
+    fontSize: 12,
+    color: "#7A4E00",
+    lineHeight: 17,
+  },
+  disclaimerTextEn: {
+    marginTop: 4,
+    fontSize: 11,
+    fontStyle: "italic",
+    color: "#8B5A00",
+    lineHeight: 15,
+  },
 });

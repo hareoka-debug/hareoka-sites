@@ -1042,18 +1042,23 @@ SEED_EMERGENCIES = [
 ]
 
 SEED_AGENCIES = [
-    {"name": "Rapa Nui Travel", "phone": "+56 9 XXXX XXXX", "whatsapp": "+56 9 XXXX XXXX", "website": "", "address": "Atamu Tekena s/n, Hanga Roa", "description": "Tours guiados por sitios arqueológicos."},
-    {"name": "Kia Koe Tour", "phone": "+56 9 XXXX XXXX", "whatsapp": "+56 9 XXXX XXXX", "website": "", "address": "Hanga Roa", "description": "Excursiones a Rano Raraku, Tongariki y Anakena."},
+    {"name": "Pukaao Tours", "phone": "+56 9 4232 4189", "whatsapp": "+56 9 4232 4189", "website": "https://pukaomoaitoursrapanui.cl/", "address": "Simon Paoa, Hanga Roa", "description": ""},
+    {"name": "Mahinatur", "phone": "+56 9 4052 2156", "whatsapp": "+56 9 4052 2156", "website": "https://mahinatur.cl/", "address": "Atamu Tekena s/n, Centro", "description": ""},
+    {"name": "Rapanui Tours", "phone": "+56 9 9070 0582", "whatsapp": "+56 9 9070 0582", "website": "https://www.instagram.com/rapanui_tours", "address": "", "description": ""},
+    {"name": "Rangitaki Tour", "phone": "+56 9 5777 6127", "whatsapp": "+56 9 5777 6127", "website": "https://rangitaki.com/", "address": "", "description": ""},
+    {"name": "Maori Tour Rapa Nui", "phone": "+56 9 4259 4391", "whatsapp": "+56 9 4259 4391", "website": "https://maoritourrapanui.com/", "address": "", "description": ""},
 ]
 
 SEED_RESTAURANTS = [
-    {"name": "Te Moana", "phone": "+56 32 2551 578", "address": "Atamu Tekena s/n", "cuisine": "Pescados y mariscos locales", "description": "Vista al mar y platos típicos rapanui."},
-    {"name": "La Kaleta", "phone": "+56 32 2552 244", "address": "Caleta Hanga Roa", "cuisine": "Mariscos", "description": "Junto a la caleta de pescadores."},
+    {"name": 'Napo"ea', "phone": "+56 9 9710 8349", "whatsapp": "+56 9 9710 8349", "website": "https://www.instagram.com/napoeapizzeria/", "address": "Apina Nui, Hanga Roa", "cuisine": "Pizzería", "description": ""},
+    {"name": "Vainativa Experience Dinners", "phone": "+56 9 9383 8167", "whatsapp": "+56 9 9383 8167", "website": "https://vainativa.com/", "address": "", "cuisine": "Cena experiencial", "description": ""},
+    {"name": "Pea Restobar", "phone": "+56 9 6777 9824", "whatsapp": "+56 9 6777 9824", "website": "https://www.instagram.com/pearestaurant_rapanuioficial/", "address": "Policarpo Toro, Borde Costero", "cuisine": "Restobar", "description": ""},
 ]
 
 SEED_RENTCARS = [
-    {"name": "Insular Rent a Car", "phone": "+56 32 2100 480", "whatsapp": "+56 9 XXXX XXXX", "address": "Hanga Roa", "description": "Autos, jeeps y motos."},
-    {"name": "Oceanic Rapa Nui", "phone": "+56 9 XXXX XXXX", "whatsapp": "+56 9 XXXX XXXX", "address": "Hanga Roa", "description": "Jeeps 4x4 y motos."},
+    {"name": "INSULAR Rent a Car", "phone": "+56 32 2100 480", "website": "https://rentainsular.cl", "address": "Calle Atamu Tekena, Hanga Roa", "description": ""},
+    {"name": "Henua Roa", "phone": "+56 9 5786 7782", "whatsapp": "+56 9 5786 7782", "website": "https://henuaroa.cl/arriendo-de-vehiculos-en-rapanui/", "address": "", "description": ""},
+    {"name": "Maika Rent a Car", "phone": "+56 9 9352 1015", "whatsapp": "+56 9 9352 1015", "website": "https://maicka.cl/", "address": "Hanga Roa, Rapa Nui", "description": ""},
 ]
 
 SEED_SONG = {

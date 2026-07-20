@@ -38,12 +38,13 @@ export default function RestaurantsScreen() {
   return (
     <ContentListScreen
       title="Restaurantes"
-      subtitle="Dónde comer en Rapa Nui"
+      subtitle="Restaurants · Dónde comer"
       icon="coffee"
       color="#E63946"
       loading={loading}
       locked={locked}
       items={items}
+      showDisclaimer
     />
   );
 }

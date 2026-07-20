@@ -38,12 +38,13 @@ export default function RentcarsScreen() {
   return (
     <ContentListScreen
       title="Rent a Car"
-      subtitle="Arriendos en la isla"
+      subtitle="Vehicle rentals · Arriendos"
       icon="truck"
       color="#F4A261"
       loading={loading}
       locked={locked}
       items={items}
+      showDisclaimer
     />
   );
 }

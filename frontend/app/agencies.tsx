@@ -39,12 +39,13 @@ export default function AgenciesScreen() {
   return (
     <ContentListScreen
       title="Agencias de Tour"
-      subtitle="Contacto directo con las agencias"
+      subtitle="Tour Agencies · Contacto directo"
       icon="briefcase"
       color="#2E86AB"
       loading={loading}
       locked={locked}
       items={items}
+      showDisclaimer
     />
   );
 }
