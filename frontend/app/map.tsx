@@ -21,20 +21,23 @@ import IslandMap from "@/src/components/IslandMap";
 import VaiBanner from "@/src/components/VaiBanner";
 import { useUserLocation } from "@/src/hooks/use-user-location";
 import {
-  PackageInfo,
   RouteData,
   WaterPoint,
   checkAccessDetailed,
-  fetchPackages,
   fetchRoutes,
   fetchWaterPoints,
   getDeviceId,
-  getLocalPaid,
-  setLocalPaid,
 } from "@/src/lib/api";
 import { colors, difficultyColor, radius, serif, spacing } from "@/src/lib/theme";
 import { distanceKm, formatDistance } from "@/src/lib/geo";
 import { shareGuideWhatsApp } from "@/src/lib/share";
+
+// Product → lista de rutas permitidas. Coincide con backend PRODUCTS.
+const ROUTES_3 = [
+  "circuito-hanga-roa",
+  "costanera-policarpo-toro",
+  "ana-kai-tangata",
+];
 
 const ON_ISLAND = (lat: number, lng: number) =>
   lat <= -27.02 && lat >= -27.22 && lng >= -109.49 && lng <= -109.2;
@@ -55,9 +58,7 @@ export default function MapScreen() {
 
   const [routes, setRoutes] = useState<RouteData[]>([]);
   const [waterPoints, setWaterPoints] = useState<WaterPoint[]>([]);
-  const [ownedPackages, setOwnedPackages] = useState<string[]>([]);
-  const [allUnlocked, setAllUnlocked] = useState<boolean>(false);
-  const [packages, setPackages] = useState<PackageInfo[]>([]);
+  const [ownedProducts, setOwnedProducts] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [filter, setFilter] = useState<Filter>("todas");
@@ -73,48 +74,19 @@ export default function MapScreen() {
     setLoading(true);
     setError(false);
     try {
-      // Guardia de acceso: si no pagó, volver al paywall
-      const paid = await getLocalPaid();
-      if (!paid) {
-        const deviceId = await getDeviceId();
-        const detailed = await checkAccessDetailed(deviceId);
-        if (!detailed.has_access) {
-          router.replace("/");
-          return;
-        }
-        await setLocalPaid();
-        if (detailed.needs_package_selection) {
-          router.replace("/select-package");
-          return;
-        }
-        setOwnedPackages(detailed.owned_packages || []);
-        setAllUnlocked(!!detailed.all_routes_unlocked);
-      } else {
-        try {
-          const deviceId = await getDeviceId();
-          const detailed = await checkAccessDetailed(deviceId);
-          if (detailed.needs_verification) {
-            router.replace("/");
-            return;
-          }
-          if (detailed.needs_package_selection) {
-            router.replace("/select-package");
-            return;
-          }
-          setOwnedPackages(detailed.owned_packages || []);
-          setAllUnlocked(!!detailed.all_routes_unlocked);
-        } catch {
-          /* offline: usar todo lo disponible */
-        }
+      const deviceId = await getDeviceId();
+      const acc = await checkAccessDetailed(deviceId).catch(() => null);
+      const owned = acc?.owned_products || [];
+      // Necesita al menos un producto de rutas
+      const hasRoutes = owned.includes("routes-3") || owned.includes("routes-all");
+      if (!hasRoutes) {
+        router.replace("/");
+        return;
       }
-      const [r, w, pkgRes] = await Promise.all([
-        fetchRoutes(),
-        fetchWaterPoints(),
-        fetchPackages().catch(() => ({ packages: [] as PackageInfo[], prices: undefined })),
-      ]);
+      setOwnedProducts(owned);
+      const [r, w] = await Promise.all([fetchRoutes(), fetchWaterPoints()]);
       setRoutes(r);
       setWaterPoints(w);
-      setPackages(pkgRes.packages || []);
     } catch {
       setError(true);
     } finally {
@@ -130,16 +102,11 @@ export default function MapScreen() {
     if (params.selected) setSelectedRouteId(params.selected);
   }, [params.selected]);
 
+  const hasAll = ownedProducts.includes("routes-all");
   const allowedRouteIds = useMemo(() => {
-    if (allUnlocked) return null; // null = todas permitidas
-    const allowed = new Set<string>();
-    for (const pkg of packages) {
-      if (ownedPackages.includes(pkg.id)) {
-        for (const r of pkg.routes) allowed.add(r.id);
-      }
-    }
-    return allowed;
-  }, [allUnlocked, ownedPackages, packages]);
+    if (hasAll) return null; // null = todas permitidas
+    return new Set(ROUTES_3);
+  }, [hasAll]);
 
   const filtered = useMemo(() => {
     const byPackage = allowedRouteIds
@@ -156,7 +123,6 @@ export default function MapScreen() {
     sheetRef.current?.snapToIndex(0);
   };
 
-  // Aviso si el usuario está fuera de la isla (el mapa web no puede mostrarlo)
   useEffect(() => {
     if (coords && !ON_ISLAND(coords.lat, coords.lng)) {
       setLocNote(
@@ -202,10 +168,9 @@ export default function MapScreen() {
     if (Platform.OS !== "web") {
       const perm = await Location.getForegroundPermissionsAsync();
       if (!perm.granted) {
-        // Explicación contextual antes del popup nativo de permisos
         Alert.alert(
           "Tu ubicación en el mapa",
-          "Mostraremos tu posición sobre las rutas para que puedas seguirlas en tiempo real mientras caminas.",
+          "Mostraremos tu posición sobre las rutas para que puedas seguirlas en tiempo real.",
           [
             { text: "Ahora no", style: "cancel" },
             { text: "Continuar", onPress: beginTracking },
@@ -222,57 +187,57 @@ export default function MapScreen() {
       ? distanceKm(coords.lat, coords.lng, item.path[0][0], item.path[0][1])
       : null;
     return (
-    <Pressable
-      style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
-      onPress={() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.push(`/route/${item.id}`);
-      }}
-      testID={`route-card-${item.id}`}
-    >
-      <Image source={{ uri: item.image }} style={styles.cardImage} contentFit="cover" />
-      <View style={styles.cardBody}>
-        <View style={styles.cardTags}>
-          <View style={[styles.tag, { backgroundColor: colors.brandTertiary }]}>
-            <Text style={[styles.tagText, { color: colors.onBrandTertiary }]}>
-              {item.type === "urbana" ? "Urbana" : "Rural"}
-            </Text>
-          </View>
-          <View style={[styles.tag, { backgroundColor: colors.surfaceTertiary }]}>
-            <Text style={[styles.tagText, { color: difficultyColor(item.difficulty) }]}>
-              {item.difficulty}
-            </Text>
-          </View>
-        </View>
-        <Text style={styles.cardTitle} numberOfLines={2}>
-          {item.name}
-        </Text>
-        <View style={styles.cardMeta}>
-          <Feather name="map" size={12} color={colors.onSurfaceTertiary} />
-          <Text style={styles.metaText}>{item.distance_km} km</Text>
-          <Feather name="clock" size={12} color={colors.onSurfaceTertiary} />
-          <Text style={styles.metaText}>
-            {Math.floor(item.duration_min / 60) > 0
-              ? `${Math.floor(item.duration_min / 60)} h ${item.duration_min % 60 || ""}${item.duration_min % 60 ? " min" : ""}`
-              : `${item.duration_min} min`}
-          </Text>
-        </View>
-        {dist !== null ? (
-          <View style={styles.cardMeta}>
-            <Feather name="navigation" size={12} color={colors.info} />
-            <Text style={styles.distText}>Inicio {formatDistance(dist)}</Text>
-          </View>
-        ) : null}
-      </View>
       <Pressable
-        hitSlop={8}
-        style={styles.pinBtn}
-        onPress={() => onSelectRoute(item.id)}
-        testID={`route-pin-${item.id}`}
+        style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push(`/route/${item.id}`);
+        }}
+        testID={`route-card-${item.id}`}
       >
-        <Feather name="map-pin" size={18} color={colors.brand} />
+        <Image source={{ uri: item.image }} style={styles.cardImage} contentFit="cover" />
+        <View style={styles.cardBody}>
+          <View style={styles.cardTags}>
+            <View style={[styles.tag, { backgroundColor: colors.brandTertiary }]}>
+              <Text style={[styles.tagText, { color: colors.onBrandTertiary }]}>
+                {item.type === "urbana" ? "Urbana" : "Rural"}
+              </Text>
+            </View>
+            <View style={[styles.tag, { backgroundColor: colors.surfaceTertiary }]}>
+              <Text style={[styles.tagText, { color: difficultyColor(item.difficulty) }]}>
+                {item.difficulty}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.cardTitle} numberOfLines={2}>
+            {item.name}
+          </Text>
+          <View style={styles.cardMeta}>
+            <Feather name="map" size={12} color={colors.onSurfaceTertiary} />
+            <Text style={styles.metaText}>{item.distance_km} km</Text>
+            <Feather name="clock" size={12} color={colors.onSurfaceTertiary} />
+            <Text style={styles.metaText}>
+              {Math.floor(item.duration_min / 60) > 0
+                ? `${Math.floor(item.duration_min / 60)} h ${item.duration_min % 60 || ""}${item.duration_min % 60 ? " min" : ""}`
+                : `${item.duration_min} min`}
+            </Text>
+          </View>
+          {dist !== null ? (
+            <View style={styles.cardMeta}>
+              <Feather name="navigation" size={12} color={colors.info} />
+              <Text style={styles.distText}>Inicio {formatDistance(dist)}</Text>
+            </View>
+          ) : null}
+        </View>
+        <Pressable
+          hitSlop={8}
+          style={styles.pinBtn}
+          onPress={() => onSelectRoute(item.id)}
+          testID={`route-pin-${item.id}`}
+        >
+          <Feather name="map-pin" size={18} color={colors.brand} />
+        </Pressable>
       </Pressable>
-    </Pressable>
     );
   };
 
@@ -298,7 +263,7 @@ export default function MapScreen() {
   return (
     <View style={styles.container}>
       <IslandMap
-        routes={routes}
+        routes={filtered}
         waterPoints={waterPoints}
         selectedRouteId={selectedRouteId}
         onSelectRoute={onSelectRoute}
@@ -306,6 +271,13 @@ export default function MapScreen() {
       />
 
       <View style={[styles.header, { top: insets.top + spacing.md }]}>
+        <Pressable
+          onPress={() => router.replace("/")}
+          style={styles.homeBtn}
+          testID="back-home"
+        >
+          <Feather name="home" size={18} color={colors.onSurface} />
+        </Pressable>
         <Pressable
           style={styles.headerChip}
           onLongPress={() => {
@@ -315,22 +287,21 @@ export default function MapScreen() {
           delayLongPress={800}
           testID="header-chip"
         >
-          <Text style={styles.headerTitle} numberOfLines={1}>Rutas Rapa Nui</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            Rutas Rapa Nui
+          </Text>
           <Text style={styles.headerSub} numberOfLines={1}>
-            {filtered.length}{allUnlocked ? "" : `/${routes.length}`} rutas
+            {filtered.length}{hasAll ? "" : `/${routes.length}`} rutas
           </Text>
         </Pressable>
-        {!allUnlocked && (
+        {!hasAll && (
           <Pressable
             style={styles.unlockBtn}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push("/upgrade");
-            }}
+            onPress={() => router.replace("/")}
             testID="unlock-more"
           >
-            <Feather name="unlock" size={14} color={colors.onBrand} />
-            <Text style={styles.unlockText}>Más rutas</Text>
+            <Feather name="unlock" size={13} color={colors.onBrand} />
+            <Text style={styles.unlockText}>+11</Text>
           </Pressable>
         )}
         <Pressable
@@ -348,7 +319,7 @@ export default function MapScreen() {
       <Pressable
         style={[
           styles.locateFab,
-          { top: insets.top + spacing.md },
+          { top: insets.top + spacing.md + 56 },
           tracking && styles.locateFabActive,
         ]}
         onPress={handleLocate}
@@ -456,6 +427,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
   },
+  homeBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   shareBtn: {
     width: 44,
     height: 44,
@@ -469,28 +450,26 @@ const styles = StyleSheet.create({
   unlockBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
-    borderRadius: radius.pill,
+    gap: 4,
+    paddingHorizontal: 10,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.brand,
   },
-  unlockText: {
-    color: colors.onBrand,
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  unlockText: { color: colors.onBrand, fontSize: 12, fontWeight: "800" },
   headerChip: {
+    flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    paddingVertical: 8,
     paddingHorizontal: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
-    alignSelf: "flex-start",
+    minHeight: 44,
+    justifyContent: "center",
   },
-  headerTitle: { fontFamily: serif, fontSize: 20, color: colors.onSurface },
-  headerSub: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 2 },
+  headerTitle: { fontFamily: serif, fontSize: 16, color: colors.onSurface },
+  headerSub: { fontSize: 11, color: colors.onSurfaceTertiary, marginTop: 1 },
   locateFab: {
     position: "absolute",
     right: spacing.lg,
@@ -507,7 +486,7 @@ const styles = StyleSheet.create({
   locNote: {
     position: "absolute",
     right: spacing.lg,
-    left: spacing.lg,
+    left: spacing.lg + 60,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,

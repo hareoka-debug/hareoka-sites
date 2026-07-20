@@ -1,13 +1,12 @@
 import { Feather } from "@expo/vector-icons";
-import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -19,30 +18,22 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
+  AccessInfo,
+  Product,
   Providers,
   checkAccessDetailed,
   checkPaymentStatus,
   clearPendingSession,
   createCheckout,
+  fetchProducts,
   fetchProviders,
   getDeviceId,
-  getLocalPaid,
   getPendingSession,
-  setLocalPaid,
   setPendingSession,
   verifyEmailOnly,
 } from "@/src/lib/api";
 import { storage } from "@/src/utils/storage";
 import { colors, radius, serif, spacing } from "@/src/lib/theme";
-
-const HERO =
-  "https://images.unsplash.com/photo-1597240890437-6d9c2d4c16aa?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NDh8MHwxfHNlYXJjaHwxfHxFYXN0ZXIlMjBJc2xhbmQlMjBNb2FpJTIwc3RhdHVlJTIwbGFuZHNjYXBlfGVufDB8fHx8MTc4MzI4MzEyNXww&ixlib=rb-4.1.0&q=85";
-
-const BULLETS: { icon: any; text: string }[] = [
-  { icon: "map", text: "11 rutas urbanas y rurales con mapa interactivo" },
-  { icon: "droplet", text: "Puntos Vai: dónde comprar agua VAINATIVA en cada ruta" },
-  { icon: "compass", text: "Moáis, playas y sitios arqueológicos con todo detalle" },
-];
 
 const METHODS: { key: string; label: string; sub: string; icon: any }[] = [
   { key: "mercadopago", label: "Mercado Pago", sub: "Tarjetas, saldo MP", icon: "smartphone" },
@@ -50,304 +41,409 @@ const METHODS: { key: string; label: string; sub: string; icon: any }[] = [
   { key: "stripe", label: "Tarjeta int.", sub: "Visa, Mastercard", icon: "globe" },
 ];
 
-export default function Paywall() {
+const PRODUCT_ROUTE: Record<string, string> = {
+  "routes-3": "/map",
+  "routes-all": "/map",
+  agencies: "/agencies",
+  restaurants: "/restaurants",
+  rentcars: "/rentcars",
+  song: "/song",
+  emergencies: "/emergencies",
+};
+
+const PRODUCT_ICON: Record<string, any> = {
+  "routes-3": "map",
+  "routes-all": "compass",
+  agencies: "briefcase",
+  restaurants: "coffee",
+  rentcars: "truck",
+  song: "music",
+  emergencies: "alert-triangle",
+};
+
+export default function Hub() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [checking, setChecking] = useState(true);
-  const [paying, setPaying] = useState(false);
-  const [restoring, setRestoring] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<Product[]>([]);
   const [providers, setProviders] = useState<Providers | null>(null);
-  const [method, setMethod] = useState<string>("mercadopago");
-  const [email, setEmail] = useState("");
+  const [access, setAccess] = useState<AccessInfo | null>(null);
+  const [deviceId, setDeviceId] = useState<string>("");
+
+  // Modal de pago
+  const [buying, setBuying] = useState<Product | null>(null);
+  const [buyEmail, setBuyEmail] = useState("");
+  const [buyMethod, setBuyMethod] = useState<string>("mercadopago");
+  const [buyBusy, setBuyBusy] = useState(false);
+  const [buyError, setBuyError] = useState<string | null>(null);
+
+  // Modal de restauración
   const [showRestore, setShowRestore] = useState(false);
   const [restoreEmail, setRestoreEmail] = useState("");
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
 
-  // Pedir al navegador (iPhone/Safari incluido) que NO borre los datos de la app
-  useEffect(() => {
-    if (Platform.OS === "web" && typeof navigator !== "undefined") {
-      try {
-        (navigator as any).storage?.persist?.();
-      } catch {
-        // no soportado: se ignora
-      }
-    }
-  }, []);
-
-  const verifyAccess = useCallback(async (): Promise<boolean> => {
-    const deviceId = await getDeviceId();
-
-    // ¿Hay un pago pendiente de una sesión anterior?
-    const pending = await getPendingSession();
-    if (pending) {
-      try {
-        const st = await checkPaymentStatus(pending);
-        if (st.payment_status === "paid") {
-          await setLocalPaid();
-          await clearPendingSession();
-        } else if (st.status === "expired") {
-          await clearPendingSession();
-        }
-      } catch {
-        // ignorar
-      }
-    }
-
+  // Cargar todo
+  const load = useCallback(async () => {
+    setLoading(true);
     try {
-      const detailed = await checkAccessDetailed(deviceId);
-      if (detailed.has_access) {
-        await setLocalPaid();
-        // Si pagó pero aún no eligió paquete → mandar a selección
-        if (detailed.needs_package_selection) {
-          router.replace("/select-package");
-          return true;
-        }
-        return true;
-      }
-      if (detailed.needs_verification) {
-        setShowRestore(true);
-        setRestoreEmail(detailed.email || "");
-        return false;
-      }
-    } catch {
-      // sin conexión
-      const localPaid = await getLocalPaid();
-      if (localPaid) return true;
-    }
-    return false;
-  }, [router]);
+      const dev = await getDeviceId();
+      setDeviceId(dev);
+      const [prodRes, provRes, accRes] = await Promise.all([
+        fetchProducts(),
+        fetchProviders().catch(() => null),
+        checkAccessDetailed(dev).catch(() => null),
+      ]);
+      setProducts(prodRes.products);
+      setProviders(provRes);
+      setAccess(accRes);
 
-  useEffect(() => {
-    (async () => {
-      const ok = await verifyAccess();
-      if (ok) {
-        router.replace("/map");
-      } else {
-        setChecking(false);
+      // ¿Hay un pago pendiente de la sesión anterior?
+      const pending = await getPendingSession();
+      if (pending) {
         try {
-          const p = await fetchProviders();
-          setProviders(p);
-          if (!p.mercadopago) setMethod(p.flow ? "flow" : "stripe");
-        } catch {
-          // se muestran todos por defecto
-        }
-      }
-    })();
-  }, [verifyAccess, router]);
-
-  const handlePay = async () => {
-    setError(null);
-    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
-      setError("Ingresa un email válido: es tu respaldo para recuperar la compra.");
-      return;
-    }
-    setPaying(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    try {
-      const deviceId = await getDeviceId();
-      await storage.setItem("rapa-nui-email", email.trim().toLowerCase());
-      const origin =
-        Platform.OS === "web" && typeof window !== "undefined"
-          ? window.location.origin
-          : (process.env.EXPO_PUBLIC_BACKEND_URL as string);
-      const { url, tx_id } = await createCheckout(deviceId, origin, method, email.trim());
-      await setPendingSession(tx_id);
-      if (Platform.OS === "web" && typeof window !== "undefined") {
-        window.location.href = url;
-        return;
-      }
-      await WebBrowser.openBrowserAsync(url);
-      const ok = await verifyAccess();
-      if (ok) router.replace("/map");
-    } catch (e: any) {
-      setError(e?.message || "Error de conexión. Intenta de nuevo.");
-    } finally {
-      setPaying(false);
-    }
-  };
-
-  const handleRestore = async () => {
-    setError(null);
-    if (!showRestore) {
-      const saved = await storage.getItem("rapa-nui-email", "");
-      setRestoreEmail(saved || "");
-      setShowRestore(true);
-      return;
-    }
-    const em = restoreEmail.trim().toLowerCase();
-    if (!/^\S+@\S+\.\S+$/.test(em)) {
-      setError("Ingresa el email con el que pagaste.");
-      return;
-    }
-    setRestoring(true);
-    try {
-      const deviceId = await getDeviceId();
-      // Verificar solo con email + mismo dispositivo (renueva sesión 30d)
-      const result = await verifyEmailOnly(deviceId, em);
-      if (result.verified) {
-        await setLocalPaid();
-        // Chequear si eligió paquete o no
-        try {
-          const access = await checkAccessDetailed(deviceId);
-          if (access.needs_package_selection) {
-            router.replace("/select-package");
-            return;
+          const st = await checkPaymentStatus(pending);
+          if (st.payment_status === "paid") {
+            await clearPendingSession();
+            const acc = await checkAccessDetailed(dev);
+            setAccess(acc);
           }
         } catch {
           /* ignore */
         }
-        router.replace("/map");
-        return;
       }
-      if (result.reason === "wrong_device") {
-        setError(
-          result.message ||
-            "Esta compra pertenece a otro dispositivo. La app se usa solo en el dispositivo que pagó.",
-        );
-      } else if (result.reason === "no_payment") {
-        setError("No encontramos un pago con ese email.");
+    } catch (e) {
+      console.warn("load failed", e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    if (Platform.OS === "web" && typeof navigator !== "undefined") {
+      try {
+        (navigator as any).storage?.persist?.();
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [load]);
+
+  const originUrl = Platform.OS === "web" && typeof window !== "undefined"
+    ? window.location.origin
+    : (process.env.EXPO_PUBLIC_BACKEND_URL as string) || "";
+
+  const ownedProducts = new Set(access?.owned_products || ["emergencies"]);
+  const emailKnown = access?.email || "";
+
+  const openProduct = (p: Product) => {
+    if (ownedProducts.has(p.id) || p.amount_clp === 0) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      router.push(PRODUCT_ROUTE[p.id] || "/");
+      return;
+    }
+    setBuyEmail(emailKnown);
+    setBuyMethod("mercadopago");
+    setBuyError(null);
+    setBuying(p);
+  };
+
+  const submitBuy = async () => {
+    if (!buying) return;
+    const em = buyEmail.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(em)) {
+      setBuyError("Ingresa un email válido.");
+      return;
+    }
+    setBuyBusy(true);
+    setBuyError(null);
+    try {
+      const res = await createCheckout(deviceId, em, buying.id, buyMethod, originUrl);
+      await setPendingSession(res.tx_id);
+      await storage.setItem("rapa-nui-email", em);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      if (Platform.OS === "web") {
+        window.location.href = res.url;
       } else {
-        setError("No pudimos verificar tu acceso.");
+        await WebBrowser.openBrowserAsync(res.url);
       }
     } catch (e: any) {
-      setError(e?.message || "Error de conexión. Intenta de nuevo.");
+      setBuyError(e?.message || "No se pudo iniciar el pago.");
     } finally {
-      setRestoring(false);
+      setBuyBusy(false);
     }
   };
 
-  if (checking) {
+  const submitRestore = async () => {
+    const em = restoreEmail.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(em)) {
+      setRestoreError("Ingresa un email válido.");
+      return;
+    }
+    setRestoreBusy(true);
+    setRestoreError(null);
+    try {
+      const res = await verifyEmailOnly(deviceId, em);
+      if (res.verified) {
+        await storage.setItem("rapa-nui-email", em);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setShowRestore(false);
+        await load();
+      } else if (res.reason === "wrong_device") {
+        setRestoreError(
+          res.message || "Esta compra fue desde otro dispositivo. La app se usa solo donde pagaste.",
+        );
+      } else {
+        setRestoreError("No encontramos compras con ese email.");
+      }
+    } catch (e: any) {
+      setRestoreError(e?.message || "Error de conexión.");
+    } finally {
+      setRestoreBusy(false);
+    }
+  };
+
+  if (loading) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color={colors.brand} />
-        <Text style={styles.loadingText}>Verificando...</Text>
+        <Text style={styles.loadingText}>Cargando…</Text>
       </View>
     );
   }
 
-  const available = METHODS.filter((m) => !providers || (providers as any)[m.key]);
-
   return (
-    <View style={styles.container}>
-      <Image source={{ uri: HERO }} style={StyleSheet.absoluteFill} contentFit="cover" />
-      <LinearGradient
-        colors={["rgba(43,58,66,0.15)", "rgba(43,58,66,0.55)", "rgba(43,58,66,0.96)"]}
-        style={StyleSheet.absoluteFill}
-      />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+      <ScrollView
+        contentContainerStyle={{
+          paddingTop: insets.top + spacing.xl,
+          paddingBottom: insets.bottom + spacing.xxxl,
+          paddingHorizontal: spacing.lg,
+        }}
       >
-        <ScrollView
-          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl, paddingTop: insets.top + spacing.xl }]}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={{ flex: 1 }} />
-          <Text style={styles.eyebrow}>GUÍA DE SENDEROS · ISLA DE PASCUA</Text>
-          <Text style={styles.headline}>Descubre{"\n"}Rapa Nui</Text>
-          <Text style={styles.sub}>
-            Todas las rutas urbanas y rurales registradas de la isla, en tu bolsillo.
+        {/* Encabezado */}
+        <View style={styles.header}>
+          <Text style={styles.eyebrow}>GUÍA DE ISLA DE PASCUA</Text>
+          <Text style={styles.title}>Descubre{"\n"}Rapa Nui</Text>
+          <Text style={styles.subtitle}>
+            Elige el contenido que quieres desbloquear. Cada compra es única: 1 email, 1 dispositivo, 30 días de acceso.
           </Text>
-
-          <View style={styles.bullets}>
-            {BULLETS.map((b) => (
-              <View key={b.icon} style={styles.bulletRow}>
-                <View style={styles.bulletIcon}>
-                  <Feather name={b.icon} size={16} color={colors.onSurfaceInverse} />
-                </View>
-                <Text style={styles.bulletText}>{b.text}</Text>
-              </View>
-            ))}
-          </View>
-
-          <Text style={styles.methodLabel}>ELIGE TU MEDIO DE PAGO</Text>
-          <View style={styles.methods}>
-            {available.map((m) => {
-              const active = method === m.key;
-              return (
-                <Pressable
-                  key={m.key}
-                  style={[styles.methodCard, active && styles.methodCardActive]}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setMethod(m.key);
-                    setError(null);
-                  }}
-                  testID={`method-${m.key}`}
-                >
-                  <Feather name={m.icon} size={18} color={active ? colors.brand : colors.onSurfaceInverse} />
-                  <Text style={[styles.methodName, active && { color: colors.brand }]}>{m.label}</Text>
-                  <Text style={styles.methodSub}>{m.sub}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <TextInput
-            style={styles.emailInput}
-            placeholder="Tu email (necesario para volver a entrar)"
-            placeholderTextColor="rgba(249,248,246,0.5)"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            testID="pay-email-input"
-          />
-          <Text style={styles.helpLine}>
-            Recibirás acceso en este dispositivo por 30 días. Después ingresas de nuevo tu email.
-          </Text>
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <Pressable
-            style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}
-            onPress={handlePay}
-            disabled={paying}
-            testID="unlock-button"
-          >
-            {paying ? (
-              <ActivityIndicator color={colors.onBrand} />
-            ) : (
-              <Text style={styles.ctaText}>Desbloquear Guía — $3.000 CLP</Text>
-            )}
-          </Pressable>
-          <Text style={styles.finePrint}>Pago único por dispositivo · Pago seguro · Sin suscripciones</Text>
-
-          {showRestore ? (
-            <>
-              <TextInput
-                style={[styles.emailInput, { marginTop: spacing.lg }]}
-                placeholder="Email con el que pagaste"
-                placeholderTextColor="rgba(249,248,246,0.5)"
-                value={restoreEmail}
-                onChangeText={setRestoreEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                testID="restore-email-input"
-              />
-              <Text style={styles.codeHint}>
-                Solo funciona en el dispositivo con el que compraste.
-              </Text>
-            </>
+          {emailKnown ? (
+            <View style={styles.emailBadge}>
+              <Feather name="check-circle" size={13} color={colors.success} />
+              <Text style={styles.emailBadgeText}>Sesión activa: {emailKnown}</Text>
+            </View>
           ) : null}
+        </View>
 
-          <Pressable onPress={handleRestore} disabled={restoring} hitSlop={12} style={styles.restore} testID="restore-button">
-            <Text style={styles.restoreText}>
-              {restoring
-                ? "Verificando..."
-                : showRestore
-                  ? "Verificar y restaurar acceso"
-                  : "¿Ya pagaste? Restaurar acceso con tu email"}
+        {/* Productos */}
+        {products.map((p) => {
+          const owned = ownedProducts.has(p.id);
+          const isFree = p.amount_clp === 0;
+          return (
+            <Pressable
+              key={p.id}
+              onPress={() => openProduct(p)}
+              style={({ pressed }) => [
+                styles.card,
+                { borderLeftColor: p.color },
+                pressed && { opacity: 0.85 },
+              ]}
+              testID={`product-${p.id}`}
+            >
+              <View style={[styles.cardIcon, { backgroundColor: `${p.color}22` }]}>
+                <Feather name={PRODUCT_ICON[p.id] || "box"} size={22} color={p.color} />
+              </View>
+              <View style={styles.cardBody}>
+                <View style={styles.cardTopRow}>
+                  <Text style={styles.cardName} numberOfLines={1}>
+                    {p.name}
+                  </Text>
+                  {owned || isFree ? (
+                    <View style={[styles.tag, styles.tagOk]}>
+                      <Feather name="unlock" size={11} color={colors.onBrand} />
+                      <Text style={styles.tagOkText}>{isFree ? "GRATIS" : "ACTIVO"}</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.tag}>
+                      <Text style={styles.tagText}>${p.amount_clp.toLocaleString("es-CL")}</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.cardShort} numberOfLines={2}>
+                  {p.short}
+                </Text>
+                <View style={styles.cardAction}>
+                  <Text style={[styles.cardActionText, { color: p.color }]}>
+                    {owned || isFree ? "Ver contenido" : "Comprar acceso"}
+                  </Text>
+                  <Feather name="chevron-right" size={16} color={p.color} />
+                </View>
+              </View>
+            </Pressable>
+          );
+        })}
+
+        {/* Restaurar acceso */}
+        <Pressable
+          onPress={() => {
+            setShowRestore(true);
+            setRestoreError(null);
+            setRestoreEmail(emailKnown);
+          }}
+          style={styles.restoreBtn}
+          testID="restore-button"
+        >
+          <Feather name="key" size={14} color={colors.onSurfaceSecondary} />
+          <Text style={styles.restoreText}>¿Ya pagaste antes? Restaurar acceso con tu email</Text>
+        </Pressable>
+
+        <Text style={styles.footer}>
+          Pago único por dispositivo · Pago seguro · Sin suscripciones
+        </Text>
+      </ScrollView>
+
+      {/* MODAL COMPRA */}
+      <Modal
+        visible={!!buying}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setBuying(null)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.modalWrap}
+        >
+          <View style={styles.modalBox}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{buying?.name}</Text>
+              <Pressable onPress={() => setBuying(null)} hitSlop={12}>
+                <Feather name="x" size={22} color={colors.onSurface} />
+              </Pressable>
+            </View>
+            <Text style={styles.modalDesc}>{buying?.description}</Text>
+            <Text style={styles.modalPrice}>
+              Precio: <Text style={{ fontWeight: "800" }}>${buying?.amount_clp.toLocaleString("es-CL")} CLP</Text>
             </Text>
-          </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
+
+            <Text style={styles.label}>Elige medio de pago</Text>
+            <View style={styles.methods}>
+              {METHODS.map((m) => {
+                const enabled = providers?.[m.key as keyof Providers] !== false;
+                const active = buyMethod === m.key;
+                return (
+                  <Pressable
+                    key={m.key}
+                    onPress={() => enabled && setBuyMethod(m.key)}
+                    style={[
+                      styles.methodBtn,
+                      active && styles.methodBtnActive,
+                      !enabled && { opacity: 0.4 },
+                    ]}
+                    testID={`method-${m.key}`}
+                  >
+                    <Feather
+                      name={m.icon}
+                      size={18}
+                      color={active ? colors.brand : colors.onSurfaceSecondary}
+                    />
+                    <Text style={[styles.methodLabel, active && { color: colors.brand }]}>
+                      {m.label}
+                    </Text>
+                    <Text style={styles.methodSub}>{m.sub}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Text style={styles.label}>Tu email (para respaldar tu compra)</Text>
+            <TextInput
+              value={buyEmail}
+              onChangeText={setBuyEmail}
+              placeholder="tu@correo.com"
+              placeholderTextColor={colors.onSurfaceTertiary}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              style={styles.input}
+              testID="buy-email"
+            />
+            {buyError ? <Text style={styles.errorText}>{buyError}</Text> : null}
+
+            <Pressable
+              onPress={submitBuy}
+              disabled={buyBusy}
+              style={[styles.payBtn, buyBusy && { opacity: 0.6 }]}
+              testID="buy-submit"
+            >
+              {buyBusy ? (
+                <ActivityIndicator color={colors.onBrand} />
+              ) : (
+                <Text style={styles.payBtnText}>
+                  Pagar ${buying?.amount_clp.toLocaleString("es-CL")} CLP
+                </Text>
+              )}
+            </Pressable>
+            <Text style={styles.modalHint}>
+              Se abrirá la página segura de {METHODS.find((x) => x.key === buyMethod)?.label}. Al volver, tu acceso queda activo.
+            </Text>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* MODAL RESTAURAR */}
+      <Modal
+        visible={showRestore}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowRestore(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.modalWrap}
+        >
+          <View style={styles.modalBox}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Restaurar acceso</Text>
+              <Pressable onPress={() => setShowRestore(false)} hitSlop={12}>
+                <Feather name="x" size={22} color={colors.onSurface} />
+              </Pressable>
+            </View>
+            <Text style={styles.modalDesc}>
+              Ingresa el email con el que pagaste. Renovamos tu sesión por 30 días en este dispositivo.
+            </Text>
+            <TextInput
+              value={restoreEmail}
+              onChangeText={setRestoreEmail}
+              placeholder="tu@correo.com"
+              placeholderTextColor={colors.onSurfaceTertiary}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              style={styles.input}
+              testID="restore-email-input"
+            />
+            {restoreError ? <Text style={styles.errorText}>{restoreError}</Text> : null}
+            <Pressable
+              onPress={submitRestore}
+              disabled={restoreBusy}
+              style={[styles.payBtn, restoreBusy && { opacity: 0.6 }]}
+              testID="restore-submit"
+            >
+              {restoreBusy ? (
+                <ActivityIndicator color={colors.onBrand} />
+              ) : (
+                <Text style={styles.payBtnText}>Verificar y entrar</Text>
+              )}
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.surfaceInverse },
   loading: {
     flex: 1,
     backgroundColor: colors.surface,
@@ -355,120 +451,158 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing.md,
   },
-  loadingText: { color: colors.onSurfaceSecondary, fontSize: 14 },
-  content: {
-    flexGrow: 1,
-    justifyContent: "flex-end",
-    paddingHorizontal: spacing.xl,
-  },
+  loadingText: { color: colors.onSurfaceTertiary, fontSize: 13 },
+  header: { marginBottom: spacing.xl },
   eyebrow: {
-    color: colors.warning,
-    fontSize: 12,
+    color: colors.brand,
+    fontSize: 11,
     letterSpacing: 2,
     fontWeight: "700",
     marginBottom: spacing.sm,
   },
-  headline: {
+  title: {
     fontFamily: serif,
-    fontSize: 46,
-    lineHeight: 50,
-    color: colors.onSurfaceInverse,
+    fontSize: 40,
+    lineHeight: 44,
+    color: colors.onSurface,
     marginBottom: spacing.md,
   },
-  sub: {
-    color: "rgba(249,248,246,0.85)",
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: spacing.xl,
+  subtitle: { fontSize: 14, lineHeight: 20, color: colors.onSurfaceSecondary },
+  emailBadge: {
+    marginTop: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    backgroundColor: `${colors.success}22`,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    alignSelf: "flex-start",
   },
-  bullets: { gap: spacing.md, marginBottom: spacing.xl },
-  bulletRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  bulletIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(179,93,74,0.9)",
+  emailBadgeText: { fontSize: 12, color: colors.success, fontWeight: "600" },
+
+  card: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: radius.md,
+    borderLeftWidth: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.md,
+  },
+  cardIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
-  bulletText: { color: colors.onSurfaceInverse, fontSize: 14, flex: 1, lineHeight: 20 },
-  methodLabel: {
-    color: "rgba(249,248,246,0.7)",
-    fontSize: 11,
-    letterSpacing: 1.5,
-    fontWeight: "700",
-    marginBottom: spacing.sm,
+  cardBody: { flex: 1, gap: 2 },
+  cardTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
   },
-  methods: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
-  methodCard: {
-    flex: 1,
-    borderWidth: 1.5,
-    borderColor: "rgba(249,248,246,0.35)",
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
+  cardName: { flex: 1, fontSize: 16, fontWeight: "700", color: colors.onSurface },
+  cardShort: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 2, marginBottom: 6 },
+  cardAction: { flexDirection: "row", alignItems: "center", gap: 4 },
+  cardActionText: { fontSize: 13, fontWeight: "700" },
+  tag: {
     paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceTertiary,
+  },
+  tagText: { fontSize: 11, fontWeight: "700", color: colors.onSurface },
+  tagOk: {
+    backgroundColor: colors.success,
+    flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    minHeight: 78,
-    justifyContent: "center",
   },
-  methodCardActive: {
-    borderColor: colors.brand,
-    backgroundColor: "rgba(249,248,246,0.95)",
-  },
-  methodName: { color: colors.onSurfaceInverse, fontSize: 13, fontWeight: "700" },
-  methodSub: { color: "rgba(150,158,166,0.95)", fontSize: 10, textAlign: "center" },
-  emailInput: {
-    borderWidth: 1.5,
-    borderColor: "rgba(249,248,246,0.35)",
-    borderRadius: radius.md,
-    minHeight: 48,
-    paddingHorizontal: spacing.md,
-    color: colors.onSurfaceInverse,
-    fontSize: 14,
-    marginBottom: spacing.md,
-    backgroundColor: "rgba(43,58,66,0.4)",
-  },
-  error: { color: "#F2B8B5", fontSize: 13, marginBottom: spacing.sm },
-  cta: {
-    backgroundColor: colors.brand,
-    borderRadius: radius.pill,
-    minHeight: 54,
+  tagOkText: { fontSize: 10, fontWeight: "800", color: colors.onBrand, letterSpacing: 0.5 },
+
+  restoreBtn: {
+    marginTop: spacing.lg,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: spacing.xl,
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    minHeight: 44,
   },
-  ctaText: { color: colors.onBrand, fontSize: 16, fontWeight: "700" },
-  finePrint: {
-    color: "rgba(249,248,246,0.6)",
-    fontSize: 12,
-    textAlign: "center",
+  restoreText: { fontSize: 13, color: colors.onSurfaceSecondary, textDecorationLine: "underline" },
+  footer: {
     marginTop: spacing.md,
-  },
-  restore: { alignSelf: "center", marginTop: spacing.lg, minHeight: 44, justifyContent: "center" },
-  restoreText: {
-    color: "rgba(249,248,246,0.85)",
-    fontSize: 13,
-    textDecorationLine: "underline",
-  },
-  codeInput: {
-    letterSpacing: 8,
-    fontSize: 18,
-    fontWeight: "600",
     textAlign: "center",
-  },
-  codeHint: {
-    color: "rgba(249,248,246,0.55)",
     fontSize: 11,
-    lineHeight: 15,
-    marginTop: -spacing.sm,
-    marginBottom: spacing.sm,
+    color: colors.onSurfaceTertiary,
   },
-  helpLine: {
-    color: "rgba(249,248,246,0.55)",
-    fontSize: 11,
-    lineHeight: 15,
-    marginTop: -spacing.xs,
-  },
-});
 
+  modalWrap: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalBox: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: spacing.xl,
+    paddingBottom: spacing.xxl,
+    gap: spacing.md,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  modalTitle: { fontFamily: serif, fontSize: 22, color: colors.onSurface, flex: 1 },
+  modalDesc: { fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 19 },
+  modalPrice: { fontSize: 14, color: colors.onSurface },
+  label: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.onSurfaceSecondary,
+    letterSpacing: 1,
+    marginTop: spacing.sm,
+  },
+  methods: { flexDirection: "row", gap: spacing.sm },
+  methodBtn: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: "center",
+    minHeight: 72,
+    justifyContent: "center",
+  },
+  methodBtnActive: { borderColor: colors.brand, backgroundColor: colors.brandTertiary },
+  methodLabel: { fontSize: 12, fontWeight: "700", color: colors.onSurface, marginTop: 4 },
+  methodSub: { fontSize: 9, color: colors.onSurfaceTertiary, textAlign: "center", marginTop: 2 },
+  input: {
+    minHeight: 48,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    fontSize: 15,
+    color: colors.onSurface,
+    backgroundColor: colors.surfaceSecondary,
+  },
+  errorText: { color: colors.error, fontSize: 13 },
+  payBtn: {
+    backgroundColor: colors.brand,
+    borderRadius: radius.pill,
+    minHeight: 52,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: spacing.sm,
+  },
+  payBtnText: { color: colors.onBrand, fontSize: 15, fontWeight: "800" },
+  modalHint: { fontSize: 11, color: colors.onSurfaceTertiary, textAlign: "center" },
+});

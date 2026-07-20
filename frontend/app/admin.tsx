@@ -4,9 +4,11 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,169 +17,73 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { adminRequest, ContentItem, fetchContent, fetchSong, SongConfig } from "@/src/lib/api";
 import { storage } from "@/src/utils/storage";
-import WaterPointsEditor from "@/src/components/WaterPointsEditor";
 import { colors, radius, serif, spacing } from "@/src/lib/theme";
 
-// En web usamos el mismo origen que sirve la app para que en preview y en
-// producción el admin apunte automáticamente al backend correcto.
-const BASE: string =
-  Platform.OS === "web" && typeof window !== "undefined"
-    ? window.location.origin
-    : (process.env.EXPO_PUBLIC_BACKEND_URL as string);
 const ADMIN_KEY_STORAGE = "rapa-nui-admin-key";
 
-interface SaleRecent {
-  id?: string;
-  email?: string;
-  provider: string;
-  amount_clp: number;
-  paid_at: string | null;
-  device_id: string;
-}
+type Tab = "sales" | "access" | "agencies" | "restaurants" | "rentcars" | "emergencies" | "song";
 
-interface Sales {
-  total_clp: number;
-  sales_count: number;
-  pending_count: number;
-  granted_count?: number;
-  by_provider: Record<string, { count: number; total_clp: number }>;
-  recent: SaleRecent[];
-}
+const PRODUCTS_ADMIN: { id: string; label: string }[] = [
+  { id: "routes-all", label: "Todas las 11 rutas ($5.000)" },
+  { id: "routes-3", label: "3 rutas urbanas ($3.000)" },
+  { id: "agencies", label: "Agencias de Tour ($3.000)" },
+  { id: "restaurants", label: "Restaurantes ($3.000)" },
+  { id: "rentcars", label: "Rent a Car ($3.000)" },
+  { id: "song", label: "Canción Rapa Nui ($3.000)" },
+];
 
-const PROVIDER_LABEL: Record<string, string> = {
-  mercadopago: "Mercado Pago",
-  flow: "Flow",
-  stripe: "Tarjeta int. (Stripe)",
-  manual: "Acceso manual",
-};
+const CLP = (n: number) => `$${(n || 0).toLocaleString("es-CL")}`;
 
-const PROVIDER_ICON: Record<string, any> = {
-  mercadopago: "smartphone",
-  flow: "credit-card",
-  stripe: "globe",
-  manual: "user-check",
-};
-
-const clp = (n: number) => `$${n.toLocaleString("es-CL")} CLP`;
-
-export default function AdminPanel() {
+export default function Admin() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [key, setKey] = useState("");
-  const [authed, setAuthed] = useState(false);
-  const [checkingStored, setCheckingStored] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [logged, setLogged] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sales, setSales] = useState<Sales | null>(null);
-  const [tab, setTab] = useState<"ventas" | "acceso" | "vai">("ventas");
+  const [tab, setTab] = useState<Tab>("sales");
 
-  // Acceso manual (para clientes que pagaron pero el registro se perdió)
-  const [grantEmail, setGrantEmail] = useState("");
-  const [grantNote, setGrantNote] = useState("");
-  const [granting, setGranting] = useState(false);
-  const [grantMsg, setGrantMsg] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const fetchSales = useCallback(async (adminKey: string): Promise<boolean> => {
-    const res = await fetch(`${BASE}/api/admin/sales`, {
-      headers: { "X-Admin-Key": adminKey },
-    });
-    if (res.status === 401) return false;
-    if (!res.ok) throw new Error("network");
-    setSales(await res.json());
-    return true;
+  const login = useCallback(async (k: string) => {
+    try {
+      await adminRequest("/admin/sales", k, "GET");
+      await storage.setItem(ADMIN_KEY_STORAGE, k);
+      setLogged(true);
+      setError(null);
+      return true;
+    } catch (e: any) {
+      setError(e?.message || "Clave incorrecta");
+      return false;
+    }
   }, []);
 
   useEffect(() => {
     (async () => {
-      const stored = await storage.getItem(ADMIN_KEY_STORAGE, "");
-      if (stored) {
-        try {
-          const ok = await fetchSales(stored);
-          if (ok) {
-            setKey(stored);
-            setAuthed(true);
-          }
-        } catch {
-          // pedir clave de nuevo
-        }
+      const saved = await storage.getItem(ADMIN_KEY_STORAGE, "");
+      if (saved) {
+        setKey(saved);
+        await login(saved);
       }
-      setCheckingStored(false);
+      setChecking(false);
     })();
-  }, [fetchSales]);
+  }, [login]);
 
-  const handleLogin = async () => {
-    setError(null);
-    setLoading(true);
+  const doLogin = async () => {
+    setBusy(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    try {
-      const ok = await fetchSales(key.trim());
-      if (ok) {
-        await storage.setItem(ADMIN_KEY_STORAGE, key.trim());
-        setAuthed(true);
-      } else {
-        setError("Clave incorrecta.");
-      }
-    } catch {
-      setError("Error de conexión. Intenta de nuevo.");
-    } finally {
-      setLoading(false);
-    }
+    await login(key.trim());
+    setBusy(false);
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await fetchSales(key);
-    } catch {
-      // mantener datos anteriores
-    }
-    setRefreshing(false);
-  };
-
-  const handleLogout = async () => {
+  const logout = async () => {
     await storage.removeItem(ADMIN_KEY_STORAGE);
-    setAuthed(false);
+    setLogged(false);
     setKey("");
-    setSales(null);
   };
 
-  const handleGrant = async () => {
-    setGrantMsg(null);
-    const email = grantEmail.trim().toLowerCase();
-    if (!/^\S+@\S+\.\S+$/.test(email)) {
-      setGrantMsg({ ok: false, text: "Ingresa un email válido (ej: cliente@correo.com)" });
-      return;
-    }
-    setGranting(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    try {
-      const res = await fetch(`${BASE}/api/admin/grant`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Admin-Key": key },
-        body: JSON.stringify({ email, note: grantNote.trim() || null }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setGrantMsg({ ok: false, text: data?.detail || "No se pudo conceder acceso." });
-      } else if (data.already_had_access) {
-        setGrantMsg({ ok: true, text: `${email} ya tenía acceso activo ✅` });
-      } else {
-        setGrantMsg({ ok: true, text: `Acceso concedido a ${email} ✅` });
-        setGrantEmail("");
-        setGrantNote("");
-        // refrescar contadores
-        try { await fetchSales(key); } catch { /* ignore */ }
-      }
-    } catch {
-      setGrantMsg({ ok: false, text: "Error de conexión. Intenta de nuevo." });
-    } finally {
-      setGranting(false);
-    }
-  };
-
-  if (checkingStored) {
+  if (checking) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={colors.brand} />
@@ -185,214 +91,649 @@ export default function AdminPanel() {
     );
   }
 
-  if (!authed) {
+  if (!logged) {
     return (
       <View style={[styles.center, { paddingHorizontal: spacing.xxl }]}>
         <View style={styles.lockIcon}>
-          <Feather name="lock" size={26} color={colors.onBrand} />
+          <Feather name="lock" size={28} color={colors.onBrand} />
         </View>
-        <Text style={styles.loginTitle}>Panel de Ventas</Text>
-        <Text style={styles.loginSub}>Acceso exclusivo del dueño de la app.</Text>
+        <Text style={styles.loginTitle}>Panel del Dueño</Text>
+        <Text style={styles.loginSub}>Acceso exclusivo del administrador.</Text>
         <TextInput
-          style={styles.keyInput}
-          placeholder="Clave de administrador"
-          placeholderTextColor={colors.onSurfaceTertiary}
           value={key}
           onChangeText={setKey}
+          placeholder="Clave de administrador"
+          placeholderTextColor={colors.onSurfaceTertiary}
           secureTextEntry
           autoCapitalize="none"
+          style={styles.input}
           testID="admin-key-input"
         />
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Pressable style={styles.loginBtn} onPress={handleLogin} disabled={loading} testID="admin-login">
-          {loading ? (
-            <ActivityIndicator color={colors.onBrand} />
-          ) : (
-            <Text style={styles.loginBtnText}>Entrar</Text>
-          )}
+        {error ? <Text style={styles.errText}>{error}</Text> : null}
+        <Pressable
+          onPress={doLogin}
+          style={[styles.primaryBtn, busy && { opacity: 0.6 }]}
+          disabled={busy}
+          testID="admin-login"
+        >
+          {busy ? <ActivityIndicator color={colors.onBrand} /> : <Text style={styles.primaryBtnText}>Entrar</Text>}
         </Pressable>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={{ marginTop: spacing.lg }}>
-          <Text style={styles.backLink}>Volver</Text>
+        <Pressable onPress={() => router.replace("/")} hitSlop={12}>
+          <Text style={styles.backLink}>Volver a la app</Text>
         </Pressable>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.headerBtn} testID="admin-back">
+    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+      <View style={[styles.topBar, { paddingTop: insets.top + spacing.md }]}>
+        <Pressable onPress={() => router.replace("/")} hitSlop={12} style={styles.iconBtn} testID="admin-back">
           <Feather name="arrow-left" size={20} color={colors.onSurface} />
         </Pressable>
-        <Text style={styles.headerTitle}>Panel del Dueño</Text>
-        <Pressable onPress={handleLogout} hitSlop={12} style={styles.headerBtn} testID="admin-logout">
+        <Text style={styles.topTitle}>Panel del Dueño</Text>
+        <Pressable onPress={logout} hitSlop={12} style={styles.iconBtn} testID="admin-logout">
           <Feather name="log-out" size={18} color={colors.onSurfaceTertiary} />
         </Pressable>
       </View>
 
-      <View style={styles.tabs}>
-        <Pressable
-          style={[styles.tab, tab === "ventas" && styles.tabActive]}
-          onPress={() => setTab("ventas")}
-          testID="tab-ventas"
-        >
-          <Feather name="bar-chart-2" size={14} color={tab === "ventas" ? colors.onBrand : colors.onSurfaceSecondary} />
-          <Text style={[styles.tabText, tab === "ventas" && styles.tabTextActive]}>Ventas</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.tab, tab === "acceso" && styles.tabActive]}
-          onPress={() => setTab("acceso")}
-          testID="tab-acceso"
-        >
-          <Feather name="user-check" size={14} color={tab === "acceso" ? colors.onBrand : colors.onSurfaceSecondary} />
-          <Text style={[styles.tabText, tab === "acceso" && styles.tabTextActive]}>Acceso</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.tab, tab === "vai" && styles.tabActive]}
-          onPress={() => setTab("vai")}
-          testID="tab-vai"
-        >
-          <Feather name="droplet" size={14} color={tab === "vai" ? colors.onBrand : colors.onSurfaceSecondary} />
-          <Text style={[styles.tabText, tab === "vai" && styles.tabTextActive]}>Puntos Vai</Text>
-        </Pressable>
-      </View>
-
-      {tab === "vai" ? (
-        <WaterPointsEditor adminKey={key} bottomInset={insets.bottom} />
-      ) : tab === "acceso" ? (
       <ScrollView
-        contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl, gap: spacing.md }}
-        keyboardShouldPersistTaps="handled"
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.tabs}
       >
-        <View style={styles.grantCard}>
-          <View style={styles.grantIcon}>
-            <Feather name="user-check" size={22} color={colors.onBrand} />
-          </View>
-          <Text style={styles.grantTitle}>Conceder acceso manual</Text>
-          <Text style={styles.grantSub}>
-            Si un cliente pagó pero perdió el acceso (cambio de teléfono, error de webhook,
-            reset del sistema), ingresa su email aquí. Podrá entrar usando "Restaurar acceso" en la app.
-          </Text>
-
-          <TextInput
-            style={styles.grantInput}
-            placeholder="Email del cliente (ej: cliente@correo.com)"
-            placeholderTextColor={colors.onSurfaceTertiary}
-            value={grantEmail}
-            onChangeText={setGrantEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            testID="grant-email"
-          />
-          <TextInput
-            style={[styles.grantInput, styles.grantNoteInput]}
-            placeholder="Nota (opcional): comprobante, fecha, proveedor…"
-            placeholderTextColor={colors.onSurfaceTertiary}
-            value={grantNote}
-            onChangeText={setGrantNote}
-            multiline
-            testID="grant-note"
-          />
-
-          {grantMsg ? (
-            <Text style={[styles.grantMsg, grantMsg.ok ? styles.grantMsgOk : styles.grantMsgErr]}>
-              {grantMsg.text}
-            </Text>
-          ) : null}
-
-          <Pressable
-            style={[styles.grantBtn, granting && { opacity: 0.6 }]}
-            onPress={handleGrant}
-            disabled={granting}
-            testID="grant-submit"
-          >
-            {granting ? (
-              <ActivityIndicator color={colors.onBrand} />
-            ) : (
-              <Text style={styles.grantBtnText}>Conceder acceso</Text>
-            )}
-          </Pressable>
-
-          <Text style={styles.grantHint}>
-            Total accesos concedidos manualmente: {sales?.granted_count ?? 0}
-          </Text>
-        </View>
-
-        <View style={styles.tipCard}>
-          <Feather name="info" size={14} color={colors.info} />
-          <Text style={styles.tipText}>
-            El cliente debe abrir la app, presionar "¿Ya pagaste? Restaurar acceso con tu email"
-            e ingresar el mismo correo que registraste aquí.
-          </Text>
-        </View>
-      </ScrollView>
-      ) : (
-      <ScrollView
-        contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
-      >
-        <View style={styles.totalCard}>
-          <Text style={styles.totalLabel}>TOTAL RECAUDADO</Text>
-          <Text style={styles.totalValue} testID="total-clp">
-            {clp(sales?.total_clp ?? 0)}
-          </Text>
-          <View style={styles.totalMeta}>
-            <Text style={styles.totalMetaText}>
-              {sales?.sales_count ?? 0} guías vendidas · {sales?.pending_count ?? 0} pagos pendientes
-            </Text>
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>Ventas por medio de pago</Text>
-        {Object.keys(sales?.by_provider ?? {}).length === 0 ? (
-          <Text style={styles.empty}>Aún no hay ventas. ¡Pronto llegarán! 🗿</Text>
-        ) : (
-          Object.entries(sales!.by_provider).map(([prov, d]) => (
-            <View key={prov} style={styles.provRow}>
-              <View style={styles.provIcon}>
-                <Feather name={PROVIDER_ICON[prov] || "dollar-sign"} size={16} color={colors.brand} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.provName}>{PROVIDER_LABEL[prov] || prov}</Text>
-                <Text style={styles.provCount}>{d.count} venta{d.count === 1 ? "" : "s"}</Text>
-              </View>
-              <Text style={styles.provTotal}>{clp(d.total_clp)}</Text>
-            </View>
-          ))
-        )}
-
-        <Text style={styles.sectionTitle}>Últimas ventas</Text>
-        {(sales?.recent ?? []).length === 0 ? (
-          <Text style={styles.empty}>Sin transacciones todavía.</Text>
-        ) : (
-          sales!.recent.map((r, i) => (
-            <View key={i} style={styles.saleRow}>
+        {(
+          [
+            { k: "sales", label: "Ventas", icon: "bar-chart-2" },
+            { k: "access", label: "Acceso", icon: "user-check" },
+            { k: "agencies", label: "Agencias", icon: "briefcase" },
+            { k: "restaurants", label: "Restaurantes", icon: "coffee" },
+            { k: "rentcars", label: "Rent a Car", icon: "truck" },
+            { k: "emergencies", label: "Emergencias", icon: "alert-triangle" },
+            { k: "song", label: "Canción", icon: "music" },
+          ] as { k: Tab; label: string; icon: any }[]
+        ).map((t) => {
+          const active = tab === t.k;
+          return (
+            <Pressable
+              key={t.k}
+              onPress={() => setTab(t.k)}
+              style={[styles.tab, active && styles.tabActive]}
+              testID={`tab-${t.k}`}
+            >
               <Feather
-                name={PROVIDER_ICON[r.provider] || "dollar-sign"}
-                size={14}
-                color={colors.onSurfaceTertiary}
+                name={t.icon}
+                size={13}
+                color={active ? colors.onBrand : colors.onSurfaceSecondary}
               />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.saleAmount}>{clp(r.amount_clp)}</Text>
-                <Text style={styles.saleMeta} numberOfLines={1}>
-                  {PROVIDER_LABEL[r.provider] || r.provider}
-                  {r.email ? ` · ${r.email}` : r.device_id ? ` · disp. ${r.device_id}…` : ""}
-                </Text>
-              </View>
-              <Text style={styles.saleDate}>
-                {r.paid_at ? new Date(r.paid_at).toLocaleDateString("es-CL", { day: "2-digit", month: "short" }) : "—"}
-              </Text>
-            </View>
-          ))
-        )}
+              <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.label}</Text>
+            </Pressable>
+          );
+        })}
       </ScrollView>
+
+      {tab === "sales" ? (
+        <SalesTab adminKey={key} />
+      ) : tab === "access" ? (
+        <AccessTab adminKey={key} />
+      ) : tab === "song" ? (
+        <SongTab adminKey={key} />
+      ) : (
+        <ContentTab adminKey={key} collection={tab} />
       )}
     </View>
   );
 }
 
+// ============== VENTAS ==============
+function SalesTab({ adminKey }: { adminKey: string }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const insets = useSafeAreaInsets();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const d = await adminRequest("/admin/sales", adminKey, "GET");
+      setData(d);
+    } finally {
+      setLoading(false);
+    }
+  }, [adminKey]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.brand} />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl, gap: spacing.md }}
+    >
+      <View style={styles.totalCard}>
+        <Text style={styles.totalLabel}>TOTAL RECAUDADO</Text>
+        <Text style={styles.totalValue}>{CLP(data?.total_clp || 0)}</Text>
+        <Text style={styles.totalMeta}>
+          {data?.sales_count || 0} ventas · {data?.pending_count || 0} pendientes
+        </Text>
+      </View>
+
+      <Text style={styles.sectionTitle}>Ventas por producto</Text>
+      {Object.entries(data?.by_product || {}).map(([pid, info]: any) => (
+        <View key={pid} style={styles.row}>
+          <Feather name="box" size={16} color={colors.brand} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowName}>{info.name || pid}</Text>
+            <Text style={styles.rowSub}>{info.count} venta{info.count === 1 ? "" : "s"}</Text>
+          </View>
+          <Text style={styles.rowVal}>{CLP(info.total_clp)}</Text>
+        </View>
+      ))}
+
+      <Text style={styles.sectionTitle}>Últimas ventas</Text>
+      {(data?.recent || []).length === 0 ? (
+        <Text style={styles.empty}>Sin transacciones todavía.</Text>
+      ) : (
+        (data?.recent || []).map((s: any, i: number) => (
+          <View key={i} style={styles.row}>
+            <Feather name="dollar-sign" size={14} color={colors.onSurfaceTertiary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowName}>{CLP(s.amount_clp)}</Text>
+              <Text style={styles.rowSub} numberOfLines={1}>
+                {s.product_name || s.product_id || "—"} · {s.email || "—"}
+              </Text>
+            </View>
+            <Text style={styles.rowSub}>
+              {s.paid_at ? new Date(s.paid_at).toLocaleDateString("es-CL") : "—"}
+            </Text>
+          </View>
+        ))
+      )}
+
+      <Pressable style={styles.refreshBtn} onPress={load}>
+        <Feather name="refresh-cw" size={14} color={colors.onSurfaceSecondary} />
+        <Text style={styles.refreshText}>Actualizar</Text>
+      </Pressable>
+    </ScrollView>
+  );
+}
+
+// ============== ACCESO MANUAL ==============
+function AccessTab({ adminKey }: { adminKey: string }) {
+  const insets = useSafeAreaInsets();
+  const [email, setEmail] = useState("");
+  const [productId, setProductId] = useState("routes-all");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const submit = async () => {
+    setMsg(null);
+    const em = email.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(em)) {
+      setMsg({ ok: false, text: "Ingresa un email válido." });
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await adminRequest("/admin/grant", adminKey, "POST", {
+        email: em,
+        product_id: productId,
+        note: note || null,
+      });
+      const productLabel = PRODUCTS_ADMIN.find((p) => p.id === productId)?.label || productId;
+      setMsg({
+        ok: true,
+        text: res.already_had_access
+          ? `${em} ya tenía ${productLabel}`
+          : `Acceso otorgado a ${em}: ${productLabel}`,
+      });
+      setEmail("");
+      setNote("");
+    } catch (e: any) {
+      setMsg({ ok: false, text: e?.message || "Error de conexión" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revoke = async () => {
+    const em = email.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(em)) {
+      setMsg({ ok: false, text: "Ingresa un email válido para revocar." });
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await adminRequest("/admin/revoke", adminKey, "POST", { email: em });
+      setMsg({
+        ok: true,
+        text: `Revocados: ${res.transactions_removed} pagos + ${res.grants_removed} grants`,
+      });
+    } catch (e: any) {
+      setMsg({ ok: false, text: e?.message || "Error" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ScrollView
+      contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl, gap: spacing.md }}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Conceder acceso manual</Text>
+        <Text style={styles.cardSub}>
+          Si un cliente pagó por otra vía (transferencia, error de webhook, respaldo tras redeploy), ingrésalo aquí y podrá entrar con "Restaurar acceso" en la app.
+        </Text>
+
+        <Text style={styles.label}>Email del cliente</Text>
+        <TextInput
+          value={email}
+          onChangeText={setEmail}
+          placeholder="cliente@correo.com"
+          placeholderTextColor={colors.onSurfaceTertiary}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          style={styles.input}
+          testID="grant-email"
+        />
+
+        <Text style={styles.label}>Producto a otorgar</Text>
+        <View style={{ gap: 6 }}>
+          {PRODUCTS_ADMIN.map((p) => {
+            const active = p.id === productId;
+            return (
+              <Pressable
+                key={p.id}
+                onPress={() => setProductId(p.id)}
+                style={[styles.productBtn, active && styles.productBtnActive]}
+              >
+                <Feather
+                  name={active ? "check-circle" : "circle"}
+                  size={16}
+                  color={active ? colors.brand : colors.onSurfaceTertiary}
+                />
+                <Text style={[styles.productBtnText, active && { color: colors.brand, fontWeight: "700" }]}>
+                  {p.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={styles.label}>Nota (opcional)</Text>
+        <TextInput
+          value={note}
+          onChangeText={setNote}
+          placeholder="Comprobante, fecha, medio de pago…"
+          placeholderTextColor={colors.onSurfaceTertiary}
+          multiline
+          style={[styles.input, { minHeight: 60, textAlignVertical: "top", paddingTop: spacing.sm }]}
+        />
+
+        {msg ? (
+          <Text style={[styles.msg, { color: msg.ok ? colors.success : colors.error }]}>
+            {msg.text}
+          </Text>
+        ) : null}
+
+        <Pressable
+          onPress={submit}
+          disabled={busy}
+          style={[styles.primaryBtn, busy && { opacity: 0.6 }]}
+          testID="grant-submit"
+        >
+          {busy ? <ActivityIndicator color={colors.onBrand} /> : <Text style={styles.primaryBtnText}>Conceder acceso</Text>}
+        </Pressable>
+
+        <Pressable onPress={revoke} disabled={busy} style={styles.secondaryBtn} testID="grant-revoke">
+          <Feather name="trash-2" size={13} color={colors.error} />
+          <Text style={styles.secondaryText}>Revocar todos los accesos de este email</Text>
+        </Pressable>
+      </View>
+    </ScrollView>
+  );
+}
+
+// ============== CONTENT CRUD ==============
+function ContentTab({ adminKey, collection }: { adminKey: string; collection: string }) {
+  const insets = useSafeAreaInsets();
+  const [items, setItems] = useState<ContentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<ContentItem | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetchContent(collection);
+      setItems(res.items);
+    } finally {
+      setLoading(false);
+    }
+  }, [collection]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const openNew = () => {
+    setEditing({
+      id: "",
+      name: "",
+      phone: "",
+      whatsapp: "",
+      website: "",
+      address: "",
+      description: "",
+      cuisine: collection === "restaurants" ? "" : undefined,
+      category: collection === "emergencies" ? "" : undefined,
+    });
+  };
+
+  const del = (item: ContentItem) => {
+    const doDelete = async () => {
+      try {
+        await adminRequest(`/admin/content/${collection}/${item.id}`, adminKey, "DELETE");
+        await load();
+      } catch (e: any) {
+        if (Platform.OS === "web") {
+          window.alert(e?.message || "Error");
+        } else {
+          Alert.alert("Error", e?.message || "Error");
+        }
+      }
+    };
+    if (Platform.OS === "web") {
+      if (window.confirm(`¿Eliminar "${item.name}"?`)) void doDelete();
+    } else {
+      Alert.alert("Eliminar", `¿Eliminar "${item.name}"?`, [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Eliminar", style: "destructive", onPress: doDelete },
+      ]);
+    }
+  };
+
+  return (
+    <View style={{ flex: 1 }}>
+      <ScrollView
+        contentContainerStyle={{
+          padding: spacing.xl,
+          paddingBottom: insets.bottom + spacing.xxl,
+          gap: spacing.md,
+        }}
+      >
+        <Pressable style={styles.primaryBtn} onPress={openNew} testID="content-new">
+          <Feather name="plus" size={16} color={colors.onBrand} />
+          <Text style={styles.primaryBtnText}>  Agregar nuevo</Text>
+        </Pressable>
+
+        {loading ? (
+          <ActivityIndicator color={colors.brand} />
+        ) : items.length === 0 ? (
+          <Text style={styles.empty}>Aún no hay elementos. Agrega el primero.</Text>
+        ) : (
+          items.map((it) => (
+            <View key={it.id} style={styles.itemCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemName}>{it.name}</Text>
+                {it.phone ? <Text style={styles.itemMeta}>📞 {it.phone}</Text> : null}
+                {it.address ? <Text style={styles.itemMeta}>📍 {it.address}</Text> : null}
+                {it.category ? <Text style={styles.itemMeta}>🔖 {it.category}</Text> : null}
+              </View>
+              <Pressable style={styles.iconBtn} onPress={() => setEditing(it)} testID={`edit-${it.id}`}>
+                <Feather name="edit-2" size={16} color={colors.brand} />
+              </Pressable>
+              <Pressable style={styles.iconBtn} onPress={() => del(it)} testID={`delete-${it.id}`}>
+                <Feather name="trash-2" size={16} color={colors.error} />
+              </Pressable>
+            </View>
+          ))
+        )}
+      </ScrollView>
+
+      <ContentEditor
+        collection={collection}
+        adminKey={adminKey}
+        item={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          setEditing(null);
+          void load();
+        }}
+      />
+    </View>
+  );
+}
+
+function ContentEditor({
+  collection,
+  adminKey,
+  item,
+  onClose,
+  onSaved,
+}: {
+  collection: string;
+  adminKey: string;
+  item: ContentItem | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState<ContentItem | null>(item);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setForm(item);
+    setErr(null);
+  }, [item]);
+
+  const save = async () => {
+    if (!form || !form.name?.trim()) {
+      setErr("El nombre es obligatorio.");
+      return;
+    }
+    if (collection === "emergencies" && !form.phone?.trim()) {
+      setErr("El teléfono es obligatorio para Emergencias.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      const body: any = { name: form.name.trim() };
+      for (const k of ["phone", "whatsapp", "website", "address", "description", "cuisine", "category"]) {
+        const v = (form as any)[k];
+        if (v && String(v).trim()) body[k] = String(v).trim();
+      }
+      if (form.id) {
+        await adminRequest(`/admin/content/${collection}/${form.id}`, adminKey, "PUT", body);
+      } else {
+        await adminRequest(`/admin/content/${collection}`, adminKey, "POST", body);
+      }
+      onSaved();
+    } catch (e: any) {
+      setErr(e?.message || "Error al guardar");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const Field = ({ label, keyName, keyboardType, multiline }: any) => (
+    <View style={{ gap: 4 }}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        value={((form as any) || {})[keyName] || ""}
+        onChangeText={(v) => setForm((s) => ({ ...(s as ContentItem), [keyName]: v }))}
+        keyboardType={keyboardType}
+        multiline={!!multiline}
+        placeholderTextColor={colors.onSurfaceTertiary}
+        style={[
+          styles.input,
+          multiline && { minHeight: 60, textAlignVertical: "top", paddingTop: spacing.sm },
+        ]}
+      />
+    </View>
+  );
+
+  return (
+    <Modal visible={!!item} animationType="slide" transparent onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.modalWrap}
+      >
+        <View style={styles.modalBox}>
+          <View style={styles.modalHead}>
+            <Text style={styles.modalTitle}>
+              {form?.id ? "Editar" : "Nuevo"} · {collection}
+            </Text>
+            <Pressable onPress={onClose} hitSlop={12}>
+              <Feather name="x" size={22} color={colors.onSurface} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={{ gap: spacing.sm, paddingBottom: spacing.md }}>
+            {Field({ label: "Nombre *", keyName: "name" })}
+            {Field({ label: "Teléfono", keyName: "phone", keyboardType: "phone-pad" })}
+            {Field({ label: "WhatsApp", keyName: "whatsapp", keyboardType: "phone-pad" })}
+            {collection !== "emergencies" && Field({ label: "Sitio web", keyName: "website", keyboardType: "url" })}
+            {collection !== "emergencies" && Field({ label: "Dirección", keyName: "address" })}
+            {collection === "restaurants" && Field({ label: "Tipo de cocina", keyName: "cuisine" })}
+            {collection === "emergencies" && Field({ label: "Categoría (Bomberos, Salud…)", keyName: "category" })}
+            {Field({ label: "Descripción", keyName: "description", multiline: true })}
+            {err ? <Text style={styles.errText}>{err}</Text> : null}
+            <Pressable
+              onPress={save}
+              disabled={busy}
+              style={[styles.primaryBtn, busy && { opacity: 0.6 }]}
+              testID="content-save"
+            >
+              {busy ? <ActivityIndicator color={colors.onBrand} /> : <Text style={styles.primaryBtnText}>Guardar</Text>}
+            </Pressable>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ============== CANCIÓN ==============
+function SongTab({ adminKey }: { adminKey: string }) {
+  const insets = useSafeAreaInsets();
+  const [form, setForm] = useState<SongConfig>({
+    title: "",
+    artist: "",
+    spotify_url: "",
+    description: "",
+  });
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchSong()
+      .then((s) => setForm(s))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
+    if (!form.title.trim() || !form.spotify_url.trim()) {
+      setMsg("Título y URL de Spotify son obligatorios.");
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    try {
+      await adminRequest("/admin/song", adminKey, "POST", form);
+      setMsg("Canción guardada correctamente.");
+    } catch (e: any) {
+      setMsg(e?.message || "Error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.brand} />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl, gap: spacing.md }}
+    >
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Canción Rapa Nui</Text>
+        <Text style={styles.cardSub}>Configura la canción tradicional que verán los clientes.</Text>
+
+        <Text style={styles.label}>Título *</Text>
+        <TextInput
+          value={form.title}
+          onChangeText={(v) => setForm({ ...form, title: v })}
+          style={styles.input}
+          placeholderTextColor={colors.onSurfaceTertiary}
+        />
+
+        <Text style={styles.label}>Artista</Text>
+        <TextInput
+          value={form.artist}
+          onChangeText={(v) => setForm({ ...form, artist: v })}
+          style={styles.input}
+          placeholderTextColor={colors.onSurfaceTertiary}
+        />
+
+        <Text style={styles.label}>URL de Spotify *</Text>
+        <TextInput
+          value={form.spotify_url}
+          onChangeText={(v) => setForm({ ...form, spotify_url: v })}
+          placeholder="https://open.spotify.com/track/..."
+          autoCapitalize="none"
+          keyboardType="url"
+          placeholderTextColor={colors.onSurfaceTertiary}
+          style={styles.input}
+        />
+
+        <Text style={styles.label}>Descripción</Text>
+        <TextInput
+          value={form.description}
+          onChangeText={(v) => setForm({ ...form, description: v })}
+          multiline
+          placeholderTextColor={colors.onSurfaceTertiary}
+          style={[styles.input, { minHeight: 80, textAlignVertical: "top", paddingTop: spacing.sm }]}
+        />
+
+        {msg ? (
+          <Text
+            style={[styles.msg, { color: msg.startsWith("Error") ? colors.error : colors.success }]}
+          >
+            {msg}
+          </Text>
+        ) : null}
+
+        <Pressable
+          onPress={save}
+          disabled={busy}
+          style={[styles.primaryBtn, busy && { opacity: 0.6 }]}
+          testID="song-save"
+        >
+          {busy ? <ActivityIndicator color={colors.onBrand} /> : <Text style={styles.primaryBtnText}>Guardar canción</Text>}
+        </Pressable>
+      </View>
+    </ScrollView>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.surface },
   center: {
     flex: 1,
     backgroundColor: colors.surface,
@@ -407,33 +748,44 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   loginTitle: { fontFamily: serif, fontSize: 26, color: colors.onSurface },
   loginSub: { fontSize: 13, color: colors.onSurfaceTertiary, marginBottom: spacing.md },
-  keyInput: {
+  input: {
     alignSelf: "stretch",
     borderWidth: 1.5,
     borderColor: colors.borderStrong,
     borderRadius: radius.md,
-    minHeight: 50,
+    minHeight: 48,
     paddingHorizontal: spacing.md,
     fontSize: 15,
     color: colors.onSurface,
     backgroundColor: colors.surfaceSecondary,
   },
-  error: { color: colors.error, fontSize: 13 },
-  loginBtn: {
-    alignSelf: "stretch",
+  errText: { color: colors.error, fontSize: 13 },
+  primaryBtn: {
     backgroundColor: colors.brand,
     borderRadius: radius.pill,
-    minHeight: 50,
+    minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
+    paddingHorizontal: spacing.xl,
   },
-  loginBtnText: { color: colors.onBrand, fontSize: 15, fontWeight: "700" },
+  primaryBtnText: { color: colors.onBrand, fontSize: 15, fontWeight: "800" },
+  secondaryBtn: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  secondaryText: { color: colors.error, fontSize: 12, textDecorationLine: "underline" },
   backLink: { color: colors.onSurfaceTertiary, fontSize: 13, textDecorationLine: "underline" },
-  header: {
+
+  topBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -441,133 +793,123 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
   },
-  headerBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontFamily: serif, fontSize: 20, color: colors.onSurface },
+  topTitle: { fontFamily: serif, fontSize: 20, color: colors.onSurface },
+  iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+
   tabs: {
-    flexDirection: "row",
     gap: spacing.sm,
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
   tab: {
-    flex: 1,
     flexDirection: "row",
-    gap: spacing.xs,
     alignItems: "center",
-    justifyContent: "center",
-    minHeight: 40,
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    height: 36,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceSecondary,
   },
   tabActive: { backgroundColor: colors.brand, borderColor: colors.brand },
-  tabText: { fontSize: 13, fontWeight: "600", color: colors.onSurfaceSecondary },
+  tabText: { fontSize: 12, fontWeight: "600", color: colors.onSurfaceSecondary },
   tabTextActive: { color: colors.onBrand },
+
   totalCard: {
     backgroundColor: colors.surfaceInverse,
     borderRadius: radius.lg,
     padding: spacing.xl,
     alignItems: "center",
-    gap: spacing.xs,
-    marginBottom: spacing.xl,
   },
   totalLabel: { color: colors.warning, fontSize: 11, letterSpacing: 2, fontWeight: "700" },
-  totalValue: { fontFamily: serif, fontSize: 38, color: colors.onSurfaceInverse },
-  totalMeta: { marginTop: spacing.xs },
-  totalMetaText: { color: "rgba(249,248,246,0.7)", fontSize: 13 },
-  sectionTitle: {
-    fontFamily: serif,
-    fontSize: 19,
-    color: colors.onSurface,
-    marginBottom: spacing.md,
-    marginTop: spacing.sm,
-  },
-  empty: { color: colors.onSurfaceTertiary, fontSize: 13, marginBottom: spacing.xl },
-  provRow: {
+  totalValue: { fontFamily: serif, fontSize: 38, color: colors.onSurfaceInverse, marginTop: 4 },
+  totalMeta: { color: "rgba(249,248,246,0.7)", fontSize: 13, marginTop: 4 },
+  sectionTitle: { fontFamily: serif, fontSize: 18, color: colors.onSurface, marginTop: spacing.sm },
+  empty: { color: colors.onSurfaceTertiary, fontSize: 13, textAlign: "center", paddingVertical: spacing.md },
+
+  row: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
     backgroundColor: colors.surfaceSecondary,
     borderRadius: radius.md,
     padding: spacing.md,
-    marginBottom: spacing.sm,
   },
-  provIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.brandTertiary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  provName: { fontSize: 14, fontWeight: "600", color: colors.onSurface },
-  provCount: { fontSize: 12, color: colors.onSurfaceTertiary },
-  provTotal: { fontSize: 14, fontWeight: "700", color: colors.success },
-  saleRow: {
+  rowName: { fontSize: 14, fontWeight: "600", color: colors.onSurface },
+  rowSub: { fontSize: 11, color: colors.onSurfaceTertiary, marginTop: 2 },
+  rowVal: { fontSize: 14, fontWeight: "700", color: colors.success },
+  refreshBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    justifyContent: "center",
+    gap: 6,
+    marginTop: spacing.md,
+    paddingVertical: spacing.md,
   },
-  saleAmount: { fontSize: 14, fontWeight: "600", color: colors.onSurface },
-  saleMeta: { fontSize: 11, color: colors.onSurfaceTertiary },
-  saleDate: { fontSize: 12, color: colors.onSurfaceTertiary },
-  // -- Acceso manual --
-  grantCard: {
-    backgroundColor: colors.surface,
+  refreshText: { color: colors.onSurfaceSecondary, fontSize: 13 },
+
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  cardTitle: { fontFamily: serif, fontSize: 20, color: colors.onSurface },
+  cardSub: { fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 19, marginBottom: spacing.xs },
+  label: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.onSurfaceSecondary,
+    letterSpacing: 1,
+    marginTop: spacing.sm,
+  },
+  productBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    minHeight: 44,
+  },
+  productBtnActive: { backgroundColor: colors.brandTertiary, borderColor: colors.brand },
+  productBtnText: { fontSize: 13, color: colors.onSurface, flex: 1 },
+
+  msg: { fontSize: 13, fontWeight: "500" },
+
+  itemCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: "#FFFFFF",
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  itemName: { fontSize: 15, fontWeight: "700", color: colors.onSurface },
+  itemMeta: { fontSize: 11, color: colors.onSurfaceTertiary, marginTop: 2 },
+
+  modalWrap: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  modalBox: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     padding: spacing.xl,
+    paddingBottom: spacing.xxl,
+    maxHeight: "90%",
     gap: spacing.md,
   },
-  grantIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.brand,
-    alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "flex-start",
-  },
-  grantTitle: { fontFamily: serif, fontSize: 20, color: colors.onSurface },
-  grantSub: { fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 19 },
-  grantInput: {
-    borderWidth: 1.5,
-    borderColor: colors.borderStrong,
-    borderRadius: radius.md,
-    minHeight: 48,
-    paddingHorizontal: spacing.md,
-    fontSize: 14,
-    color: colors.onSurface,
-    backgroundColor: colors.surfaceSecondary,
-  },
-  grantNoteInput: { minHeight: 72, paddingTop: spacing.sm, textAlignVertical: "top" },
-  grantMsg: { fontSize: 13, fontWeight: "500" },
-  grantMsgOk: { color: colors.success },
-  grantMsgErr: { color: colors.error },
-  grantBtn: {
-    backgroundColor: colors.brand,
-    borderRadius: radius.pill,
-    minHeight: 50,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: spacing.xs,
-  },
-  grantBtnText: { color: colors.onBrand, fontSize: 15, fontWeight: "700" },
-  grantHint: { fontSize: 12, color: colors.onSurfaceTertiary, textAlign: "center" },
-  tipCard: {
+  modalHead: {
     flexDirection: "row",
-    gap: spacing.sm,
-    backgroundColor: colors.surfaceSecondary,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    alignItems: "flex-start",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  tipText: { flex: 1, fontSize: 12, color: colors.onSurfaceSecondary, lineHeight: 17 },
+  modalTitle: { fontFamily: serif, fontSize: 20, color: colors.onSurface, flex: 1 },
 });
