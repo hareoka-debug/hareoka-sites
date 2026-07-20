@@ -941,14 +941,27 @@ async def admin_grant(body: GrantRequest, request: Request):
     if not re.match(r"^\S+@\S+\.\S+$", email):
         raise HTTPException(status_code=400, detail="Email inválido")
 
-    # ¿Ya tiene una transacción paid? No dupliquemos.
+    # ¿Ya tiene una transacción paid? Aseguramos que tenga TODAS las rutas.
     existing = await db.payment_transactions.find_one({"email": email, "payment_status": "paid"})
     if existing:
+        # Si el registro no tenía all_routes_unlocked, lo actualizamos ahora
+        # para que los grants manuales siempre den acceso completo a las 11 rutas.
+        if not existing.get("all_routes_unlocked"):
+            await db.payment_transactions.update_one(
+                {"id": existing["id"]},
+                {"$set": {
+                    "all_routes_unlocked": True,
+                    "owned_packages": [p["id"] for p in PACKAGES],
+                }},
+            )
         return {"granted": True, "already_had_access": True, "tx_id": existing["id"], "access_code": existing.get("access_code")}
 
     now = datetime.now(timezone.utc).isoformat()
     tx_id = str(uuid.uuid4())
     access_code = f"{secrets.randbelow(10 ** ACCESS_CODE_LENGTH):0{ACCESS_CODE_LENGTH}d}"
+    # Grants manuales del admin: desbloqueamos TODAS las rutas por defecto.
+    # Así el cliente no tiene que elegir un paquete y ve las 11 rutas.
+    all_pkg_ids = [p["id"] for p in PACKAGES]
     await db.payment_transactions.insert_one({
         "id": tx_id,
         "provider": "manual",
@@ -960,6 +973,8 @@ async def admin_grant(body: GrantRequest, request: Request):
         "payment_status": "paid",
         "access_code": access_code,
         "max_devices": MAX_DEVICES_PER_PAYMENT,
+        "owned_packages": all_pkg_ids,
+        "all_routes_unlocked": True,
         "created_at": now,
         "paid_at": now,
         "manual_note": body.note or "",
@@ -977,6 +992,7 @@ async def admin_grant_bulk(body: BulkGrantRequest, request: Request):
     """Concede acceso a múltiples emails a la vez (útil para restaurar
     compradores luego de una pérdida de BD)."""
     _check_admin(request)
+    all_pkg_ids = [p["id"] for p in PACKAGES]
     results = []
     for raw in body.emails:
         email = raw.strip().lower()
@@ -985,6 +1001,14 @@ async def admin_grant_bulk(body: BulkGrantRequest, request: Request):
             continue
         existing = await db.payment_transactions.find_one({"email": email, "payment_status": "paid"})
         if existing:
+            if not existing.get("all_routes_unlocked"):
+                await db.payment_transactions.update_one(
+                    {"id": existing["id"]},
+                    {"$set": {
+                        "all_routes_unlocked": True,
+                        "owned_packages": all_pkg_ids,
+                    }},
+                )
             results.append({"email": email, "granted": True, "already": True, "access_code": existing.get("access_code")})
             continue
         now = datetime.now(timezone.utc).isoformat()
@@ -1001,6 +1025,8 @@ async def admin_grant_bulk(body: BulkGrantRequest, request: Request):
             "payment_status": "paid",
             "access_code": access_code,
             "max_devices": MAX_DEVICES_PER_PAYMENT,
+            "owned_packages": all_pkg_ids,
+            "all_routes_unlocked": True,
             "created_at": now,
             "paid_at": now,
             "manual_note": body.note or "",
