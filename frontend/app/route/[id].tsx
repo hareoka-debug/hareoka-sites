@@ -92,11 +92,22 @@ export default function RouteDetail() {
           />
           <Pressable
             style={[styles.backBtn, { top: insets.top + spacing.sm }]}
-            onPress={() => router.back()}
+            onPress={() => {
+              try {
+                if (router.canGoBack()) {
+                  router.back();
+                  return;
+                }
+              } catch {
+                /* ignore */
+              }
+              router.replace("/map");
+            }}
             hitSlop={12}
             testID="back-button"
           >
-            <Feather name="arrow-left" size={20} color={colors.onSurface} />
+            <Feather name="arrow-left" size={18} color={colors.onSurface} />
+            <Text style={styles.backBtnText}>Volver</Text>
           </Pressable>
           <Pressable
             style={[styles.shareHeroBtn, { top: insets.top + spacing.sm }]}
@@ -279,14 +290,17 @@ const styles = StyleSheet.create({
   backBtn: {
     position: "absolute",
     left: spacing.lg,
-    width: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     height: 40,
+    paddingHorizontal: spacing.md,
     borderRadius: 20,
     backgroundColor: colors.surface,
-    alignItems: "center",
     justifyContent: "center",
     zIndex: 2,
   },
+  backBtnText: { fontSize: 13, fontWeight: "700", color: colors.onSurface },
   heroContent: { padding: spacing.xl, gap: spacing.sm },
   shareHeroBtn: {
     position: "absolute",

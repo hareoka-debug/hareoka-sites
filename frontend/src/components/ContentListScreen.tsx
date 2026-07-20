@@ -2,11 +2,21 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import React from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ContentItem } from "@/src/lib/api";
 import { colors, radius, serif, spacing } from "@/src/lib/theme";
+
+// En web abrimos siempre en pestaña nueva para NO abandonar la app.
+// En nativo usamos Linking normal.
+function openExternal(url: string) {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    window.open(url, "_blank", "noopener,noreferrer");
+  } else {
+    Linking.openURL(url).catch(() => {});
+  }
+}
 
 type Props = {
   title: string;
@@ -118,13 +128,21 @@ export function ContentListScreen({ title, subtitle, icon, color, loading, locke
 }
 
 function ItemCard({ item, color }: { item: ContentItem; color: string }) {
-  const call = () => item.phone && Linking.openURL(`tel:${cleanPhone(item.phone)}`);
+  const call = () => {
+    if (!item.phone) return;
+    // En web, `tel:` funciona en móvil pero en desktop simplemente ignora; usamos ventana nueva por seguridad.
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      window.open(`tel:${cleanPhone(item.phone)}`, "_self");
+    } else {
+      Linking.openURL(`tel:${cleanPhone(item.phone)}`).catch(() => {});
+    }
+  };
   const wsp = () => {
     if (!item.whatsapp) return;
     const num = cleanPhone(item.whatsapp).replace("+", "");
-    Linking.openURL(`https://wa.me/${num}`);
+    openExternal(`https://wa.me/${num}`);
   };
-  const web = () => item.website && Linking.openURL(ensureHttp(item.website));
+  const web = () => item.website && openExternal(ensureHttp(item.website));
 
   return (
     <View style={[styles.card, { borderLeftColor: color }]}>
