@@ -91,25 +91,6 @@ export default function RouteDetail() {
             style={StyleSheet.absoluteFill}
           />
           <Pressable
-            style={[styles.backBtn, { top: insets.top + spacing.sm }]}
-            onPress={() => {
-              try {
-                if (router.canGoBack()) {
-                  router.back();
-                  return;
-                }
-              } catch {
-                /* ignore */
-              }
-              router.replace("/map");
-            }}
-            hitSlop={12}
-            testID="back-button"
-          >
-            <Feather name="arrow-left" size={18} color={colors.onSurface} />
-            <Text style={styles.backBtnText}>Volver</Text>
-          </Pressable>
-          <Pressable
             style={[styles.shareHeroBtn, { top: insets.top + spacing.sm }]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -251,6 +232,27 @@ export default function RouteDetail() {
         </View>
       </ScrollView>
 
+      {/* FAB Volver — SIEMPRE visible arriba a la izquierda */}
+      <Pressable
+        style={[styles.fabBack, { top: insets.top + spacing.sm }]}
+        onPress={() => {
+          try {
+            if (router.canGoBack()) {
+              router.back();
+              return;
+            }
+          } catch {
+            /* ignore */
+          }
+          router.replace("/map");
+        }}
+        hitSlop={12}
+        testID="back-button"
+      >
+        <Feather name="arrow-left" size={18} color={colors.onSurface} />
+        <Text style={styles.fabBackText}>Volver</Text>
+      </Pressable>
+
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
         <Pressable
           style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}
@@ -301,6 +303,26 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   backBtnText: { fontSize: 13, fontWeight: "700", color: colors.onSurface },
+  fabBack: {
+    position: "absolute",
+    left: spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: 44,
+    paddingHorizontal: spacing.lg,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+    zIndex: 10,
+  },
+  fabBackText: { fontSize: 14, fontWeight: "700", color: colors.onSurface },
   heroContent: { padding: spacing.xl, gap: spacing.sm },
   shareHeroBtn: {
     position: "absolute",

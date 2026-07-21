@@ -97,31 +97,42 @@ export function ContentListScreen({ title, subtitle, icon, color, loading, locke
           <Text style={styles.empty}>{emptyMsg || "Aún no hay elementos aquí."}</Text>
         </View>
       ) : (
-        <ScrollView
-          contentContainerStyle={{
-            paddingHorizontal: spacing.lg,
-            paddingBottom: insets.bottom + spacing.xl,
-            paddingTop: spacing.sm,
-            gap: spacing.md,
-          }}
-        >
-          {showDisclaimer ? (
-            <View style={styles.disclaimer}>
-              <Feather name="alert-circle" size={14} color={colors.warning} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.disclaimerText}>
-                  Los comercios aquí listados son negocios independientes de la isla, sugeridos con fines informativos. No pertenecen ni están asociados a "Descubre Rapa Nui". Verifica precios, condiciones y disponibilidad directamente con cada uno.
-                </Text>
-                <Text style={styles.disclaimerTextEn}>
-                  The businesses listed here are independent local businesses, suggested for informational purposes. They are not owned by or affiliated with "Descubre Rapa Nui". Confirm prices, conditions and availability directly with each one.
-                </Text>
+        <>
+          <ScrollView
+            contentContainerStyle={{
+              paddingHorizontal: spacing.lg,
+              paddingBottom: insets.bottom + spacing.xxxl + 60,
+              paddingTop: spacing.sm,
+              gap: spacing.md,
+            }}
+          >
+            {showDisclaimer ? (
+              <View style={styles.disclaimer}>
+                <Feather name="alert-circle" size={14} color={colors.warning} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.disclaimerText}>
+                    Los comercios aquí listados son negocios independientes de la isla, sugeridos con fines informativos. No pertenecen ni están asociados a "Descubre Rapa Nui". Verifica precios, condiciones y disponibilidad directamente con cada uno.
+                  </Text>
+                  <Text style={styles.disclaimerTextEn}>
+                    The businesses listed here are independent local businesses, suggested for informational purposes. They are not owned by or affiliated with "Descubre Rapa Nui". Confirm prices, conditions and availability directly with each one.
+                  </Text>
+                </View>
               </View>
-            </View>
-          ) : null}
-          {items.map((it) => (
-            <ItemCard key={it.id} item={it} color={color} />
-          ))}
-        </ScrollView>
+            ) : null}
+            {items.map((it) => (
+              <ItemCard key={it.id} item={it} color={color} />
+            ))}
+          </ScrollView>
+          {/* Botón flotante Volver — SIEMPRE visible aunque hagas scroll */}
+          <Pressable
+            onPress={goBack}
+            style={[styles.fabBack, { bottom: insets.bottom + spacing.lg }]}
+            testID="back-fab"
+          >
+            <Feather name="arrow-left" size={18} color="#FFFFFF" />
+            <Text style={styles.fabBackText}>Volver</Text>
+          </Pressable>
+        </>
       )}
     </View>
   );
@@ -309,4 +320,21 @@ const styles = StyleSheet.create({
     color: "#8B5A00",
     lineHeight: 15,
   },
+  fabBack: {
+    position: "absolute",
+    left: spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: spacing.lg,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.brand,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  fabBackText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
 });
