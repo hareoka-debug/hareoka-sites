@@ -963,6 +963,13 @@ if _FRONTEND_DIST.exists() and (_FRONTEND_DIST / "index.html").exists():
     try:
         _INDEX_HTML = (_FRONTEND_DIST / "index.html").read_text(encoding="utf-8")
         _INDEX_HTML = _INDEX_HTML.replace("<html lang=\"en\"", "<html lang=\"es\"")
+        # Habilitar safe-area en iOS Safari (viewport-fit=cover) para que el
+        # FAB "Volver" no quede tapado por la barra inferior del navegador.
+        if "viewport-fit=cover" not in _INDEX_HTML:
+            _INDEX_HTML = _INDEX_HTML.replace(
+                'name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"',
+                'name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"',
+            )
         if "application-name" not in _INDEX_HTML:
             _INDEX_HTML = _INDEX_HTML.replace("<title>", _META_INJECT + "    <title>", 1)
     except Exception as _e:

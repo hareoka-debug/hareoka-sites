@@ -357,6 +357,15 @@ export default function Hub() {
         <Text style={styles.footerEn}>
           One-time payment per device · Secure payment · No subscriptions
         </Text>
+
+        <Pressable
+          onPress={() => router.push("/admin")}
+          style={styles.adminLink}
+          testID="admin-link"
+        >
+          <Feather name="settings" size={12} color={colors.onSurfaceTertiary} />
+          <Text style={styles.adminLinkText}>Panel del dueño · Owner panel</Text>
+        </Pressable>
         </View>
       </ScrollView>
 
@@ -706,6 +715,16 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: colors.onSurfaceTertiary,
   },
+  adminLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    marginTop: spacing.lg,
+    paddingVertical: spacing.sm,
+    opacity: 0.7,
+  },
+  adminLinkText: { fontSize: 11, color: colors.onSurfaceTertiary, textDecorationLine: "underline" },
 
   modalWrap: {
     flex: 1,

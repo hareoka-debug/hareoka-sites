@@ -123,14 +123,18 @@ export function ContentListScreen({ title, subtitle, icon, color, loading, locke
               <ItemCard key={it.id} item={it} color={color} />
             ))}
           </ScrollView>
-          {/* Botón flotante Volver — SIEMPRE visible aunque hagas scroll */}
+          {/* Botón flotante Volver — SIEMPRE visible aunque hagas scroll.
+              En web mantenemos un buffer extra para evitar la barra de Safari iOS. */}
           <Pressable
             onPress={goBack}
-            style={[styles.fabBack, { bottom: insets.bottom + spacing.lg }]}
+            style={[
+              styles.fabBack,
+              { bottom: Math.max(insets.bottom, 0) + (Platform.OS === "web" ? 80 : spacing.lg) },
+            ]}
             testID="back-fab"
           >
-            <Feather name="arrow-left" size={18} color="#FFFFFF" />
-            <Text style={styles.fabBackText}>Volver</Text>
+            <Feather name="arrow-left" size={20} color="#FFFFFF" />
+            <Text style={styles.fabBackText}>Volver / Back</Text>
           </Pressable>
         </>
       )}
@@ -325,16 +329,18 @@ const styles = StyleSheet.create({
     left: spacing.lg,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: spacing.lg,
-    height: 48,
-    borderRadius: 24,
+    gap: 8,
+    paddingHorizontal: spacing.xl,
+    height: 54,
+    borderRadius: 27,
     backgroundColor: colors.brand,
     shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 12,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
   },
-  fabBackText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
+  fabBackText: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
 });
