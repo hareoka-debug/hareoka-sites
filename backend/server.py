@@ -669,13 +669,36 @@ async def flow_webhook(request: Request):
 
 def _check_admin(request: Request):
     key = request.headers.get("X-Admin-Key") or request.query_params.get("key")
+    # Prioriza la clave guardada en DB (mutable) sobre la de env.
+    # Como este helper es async solo en algunos flujos, cargamos en cada request.
+    if not key:
+        raise HTTPException(status_code=401, detail="Clave de administrador requerida")
+    # Nota: la verificación real la hace _check_admin_async cuando es posible.
+    # Este helper sigue funcionando con env var como fallback.
     if not ADMIN_KEY or key != ADMIN_KEY:
+        raise HTTPException(status_code=401, detail="Clave de administrador incorrecta")
+
+
+async def _get_current_admin_key() -> str:
+    """Clave actual: primero DB, luego env."""
+    doc = await db.admin_config.find_one({"id": "main"})
+    if doc and doc.get("key"):
+        return doc["key"]
+    return ADMIN_KEY or ""
+
+
+async def _verify_admin_async(request: Request):
+    provided = request.headers.get("X-Admin-Key") or request.query_params.get("key")
+    if not provided:
+        raise HTTPException(status_code=401, detail="Clave de administrador requerida")
+    current = await _get_current_admin_key()
+    if not current or provided != current:
         raise HTTPException(status_code=401, detail="Clave de administrador incorrecta")
 
 
 @api_router.get("/admin/sales")
 async def admin_sales(request: Request):
-    _check_admin(request)
+    await _verify_admin_async(request)
     paid = await db.payment_transactions.find(
         {"payment_status": "paid"},
         {"_id": 0, "provider": 1, "amount_clp": 1, "paid_at": 1, "device_id": 1, "email": 1,
@@ -734,7 +757,7 @@ async def admin_grant(body: GrantRequest, request: Request):
     """Otorga acceso manual a un producto específico. Por defecto: routes-all.
     Crea una transacción provider=manual que puede ser vinculada a cualquier
     dispositivo del cliente vía verify-email."""
-    _check_admin(request)
+    await _verify_admin_async(request)
     email = body.email.strip().lower()
     if not re.match(r"^\S+@\S+\.\S+$", email):
         raise HTTPException(status_code=400, detail="Email inválido")
@@ -781,11 +804,72 @@ class RevokeRequest(BaseModel):
 @api_router.post("/admin/revoke")
 async def admin_revoke(body: RevokeRequest, request: Request):
     """Revoca todos los accesos manuales de un email."""
-    _check_admin(request)
+    await _verify_admin_async(request)
     email = body.email.strip().lower()
     r1 = await db.payment_transactions.delete_many({"email": email, "provider": "manual"})
     r2 = await db.access_grants.delete_many({"email": email})
     return {"transactions_removed": r1.deleted_count, "grants_removed": r2.deleted_count}
+
+
+class ChangeKeyRequest(BaseModel):
+    current_key: str
+    new_key: str
+
+
+@api_router.post("/admin/change-key")
+async def admin_change_key(body: ChangeKeyRequest, request: Request):
+    """Cambia la clave del panel admin. Requiere la clave actual válida."""
+    await _verify_admin_async(request)
+    current = await _get_current_admin_key()
+    if body.current_key != current:
+        raise HTTPException(status_code=401, detail="Clave actual incorrecta")
+    new_key = body.new_key.strip()
+    if len(new_key) < 6:
+        raise HTTPException(status_code=400, detail="La nueva clave debe tener al menos 6 caracteres")
+    await db.admin_config.update_one(
+        {"id": "main"},
+        {"$set": {"id": "main", "key": new_key, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    return {"changed": True}
+
+
+class ResetSalesRequest(BaseModel):
+    confirm: str  # Debe ser "RESET" para confirmar
+
+
+@api_router.post("/admin/reset-sales")
+async def admin_reset_sales(body: ResetSalesRequest, request: Request):
+    """Borra TODAS las ventas registradas y todos los accesos. Acción irreversible.
+    Requiere confirmación con la palabra RESET."""
+    await _verify_admin_async(request)
+    if body.confirm != "RESET":
+        raise HTTPException(status_code=400, detail="Confirmación inválida. Escribe RESET exactamente.")
+    r1 = await db.payment_transactions.delete_many({})
+    r2 = await db.access_grants.delete_many({})
+    return {
+        "reset": True,
+        "transactions_removed": r1.deleted_count,
+        "grants_removed": r2.deleted_count,
+    }
+
+
+@api_router.get("/admin/routes")
+async def admin_list_routes(request: Request):
+    """Lista informativa de las 11 rutas GPS configuradas."""
+    await _verify_admin_async(request)
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "type": r["type"],
+            "distance_km": r["distance_km"],
+            "duration_min": r["duration_min"],
+            "difficulty": r["difficulty"],
+            "pois_count": len(r.get("pois", [])),
+        }
+        for r in ROUTES
+    ]
 
 
 # ============================================================
@@ -839,7 +923,7 @@ class SongConfigIn(BaseModel):
 
 @api_router.post("/admin/song")
 async def admin_set_song(body: SongConfigIn, request: Request):
-    _check_admin(request)
+    await _verify_admin_async(request)
     await db.song_config.update_one(
         {"id": "main"},
         {"$set": {"id": "main", **body.dict()}},
@@ -850,7 +934,7 @@ async def admin_set_song(body: SongConfigIn, request: Request):
 
 @api_router.post("/admin/content/{collection}")
 async def admin_create_content(collection: str, body: ContentItem, request: Request):
-    _check_admin(request)
+    await _verify_admin_async(request)
     if collection not in EDITABLE_COLLECTIONS:
         raise HTTPException(status_code=404, detail="Colección no existe")
     doc = {"id": str(uuid.uuid4()), **{k: v for k, v in body.dict().items() if v is not None}}
@@ -860,7 +944,7 @@ async def admin_create_content(collection: str, body: ContentItem, request: Requ
 
 @api_router.put("/admin/content/{collection}/{item_id}")
 async def admin_update_content(collection: str, item_id: str, body: ContentItem, request: Request):
-    _check_admin(request)
+    await _verify_admin_async(request)
     if collection not in EDITABLE_COLLECTIONS:
         raise HTTPException(status_code=404, detail="Colección no existe")
     upd = {k: v for k, v in body.dict().items() if v is not None}
@@ -873,7 +957,7 @@ async def admin_update_content(collection: str, item_id: str, body: ContentItem,
 
 @api_router.delete("/admin/content/{collection}/{item_id}")
 async def admin_delete_content(collection: str, item_id: str, request: Request):
-    _check_admin(request)
+    await _verify_admin_async(request)
     if collection not in EDITABLE_COLLECTIONS:
         raise HTTPException(status_code=404, detail="Colección no existe")
     result = await db[collection].delete_one({"id": item_id})
@@ -893,7 +977,7 @@ class WaterPointIn(BaseModel):
 
 @api_router.post("/admin/water-points")
 async def create_water_point(body: WaterPointIn, request: Request):
-    _check_admin(request)
+    await _verify_admin_async(request)
     doc = {"id": str(uuid.uuid4()), "custom": True, **body.dict()}
     await db.water_points.insert_one({**doc})
     return doc
@@ -901,7 +985,7 @@ async def create_water_point(body: WaterPointIn, request: Request):
 
 @api_router.put("/admin/water-points/{point_id}")
 async def update_water_point(point_id: str, body: WaterPointIn, request: Request):
-    _check_admin(request)
+    await _verify_admin_async(request)
     result = await db.water_points.update_one({"id": point_id}, {"$set": body.dict()})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Punto no encontrado")
@@ -910,7 +994,7 @@ async def update_water_point(point_id: str, body: WaterPointIn, request: Request
 
 @api_router.delete("/admin/water-points/{point_id}")
 async def delete_water_point(point_id: str, request: Request):
-    _check_admin(request)
+    await _verify_admin_async(request)
     result = await db.water_points.delete_one({"id": point_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Punto no encontrado")
@@ -1070,10 +1154,10 @@ SEED_RENTCARS = [
 
 SEED_SONG = {
     "id": "main",
-    "title": "He Tuki Tuki Kuara",
-    "artist": "Matato'a",
-    "spotify_url": "https://open.spotify.com/track/6f9x8N3zJv2sN7ZBqM5t4V",
-    "description": "Canción tradicional rapanui interpretada por el grupo Matato'a. Ábrela en Spotify para escucharla completa.",
+    "title": "Descubre Rapa Nui — Episodio Exclusivo",
+    "artist": "Podcast Rapa Nui",
+    "spotify_url": "https://open.spotify.com/episode/0kWE5WDp7AmXtVSFQDLOG1?si=ce314c83399642cb",
+    "description": "Escucha y descubre la emoción que expresa el pasado. Episodio exclusivo disponible en Spotify.",
 }
 
 

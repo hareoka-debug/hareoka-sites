@@ -23,7 +23,7 @@ import { colors, radius, serif, spacing } from "@/src/lib/theme";
 
 const ADMIN_KEY_STORAGE = "rapa-nui-admin-key";
 
-type Tab = "sales" | "access" | "agencies" | "restaurants" | "rentcars" | "emergencies" | "song";
+type Tab = "sales" | "access" | "routes" | "agencies" | "restaurants" | "rentcars" | "emergencies" | "song" | "security";
 
 const PRODUCTS_ADMIN: { id: string; label: string }[] = [
   { id: "routes-all", label: "Todas las 11 rutas ($5.000)" },
@@ -45,6 +45,30 @@ export default function Admin() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("sales");
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [wiped, setWiped] = useState(false);
+
+  const wipeAppData = useCallback(async () => {
+    // "Autodestrucción": borramos TODO el localStorage local, simulando
+    // que la app se ha desinstalado. El intruso pierde su sesión, device_id,
+    // acceso restaurado, etc. En web no podemos desinstalar de verdad, pero
+    // sí resetear a estado de "nueva instalación".
+    try {
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        window.localStorage.clear();
+        window.sessionStorage?.clear?.();
+      }
+      // Además, limpiamos claves conocidas por si acaso.
+      await storage.removeItem("rapa-nui-device-id");
+      await storage.removeItem("rapa-nui-paid");
+      await storage.removeItem("rapa-nui-email");
+      await storage.removeItem("rapa-nui-pending-session");
+      await storage.removeItem(ADMIN_KEY_STORAGE);
+    } catch {
+      /* ignore */
+    }
+    setWiped(true);
+  }, []);
 
   const login = useCallback(async (k: string) => {
     try {
@@ -52,9 +76,11 @@ export default function Admin() {
       await storage.setItem(ADMIN_KEY_STORAGE, k);
       setLogged(true);
       setError(null);
+      setFailedAttempts(0);
       return true;
     } catch (e: any) {
       setError(e?.message || "Clave incorrecta");
+      setFailedAttempts((prev) => prev + 1);
       return false;
     }
   }, []);
@@ -73,8 +99,34 @@ export default function Admin() {
   const doLogin = async () => {
     setBusy(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await login(key.trim());
+    const ok = await login(key.trim());
     setBusy(false);
+    if (!ok) {
+      // 3 intentos fallidos = autodestruir la sesión local del dispositivo
+      const attempts = failedAttempts + 1;
+      if (attempts >= 3) {
+        const msg =
+          "⚠️ ACCESO NO AUTORIZADO DETECTADO ⚠️\n\n" +
+          "Este panel es exclusivo del dueño de la aplicación. " +
+          "Tu intento ha sido registrado.\n\n" +
+          "Por seguridad, la sesión y todos los datos locales de esta app " +
+          "serán eliminados de este dispositivo.";
+        if (Platform.OS === "web" && typeof window !== "undefined") {
+          window.alert(msg);
+        } else {
+          Alert.alert("Acceso no autorizado", msg);
+        }
+        await wipeAppData();
+        // Redirigir al home tras el borrado
+        setTimeout(() => {
+          if (Platform.OS === "web" && typeof window !== "undefined") {
+            window.location.href = "/";
+          } else {
+            router.replace("/");
+          }
+        }, 200);
+      }
+    }
   };
 
   const logout = async () => {
@@ -92,6 +144,25 @@ export default function Admin() {
   }
 
   if (!logged) {
+    if (wiped) {
+      return (
+        <View style={[styles.center, { paddingHorizontal: spacing.xxl }]}>
+          <View style={[styles.lockIcon, { backgroundColor: colors.error }]}>
+            <Feather name="alert-octagon" size={28} color="#FFFFFF" />
+          </View>
+          <Text style={styles.loginTitle}>Acceso denegado</Text>
+          <Text style={[styles.loginSub, { textAlign: "center" }]}>
+            Los datos locales de esta aplicación han sido eliminados por seguridad.
+            {"\n\n"}
+            Local app data has been erased for security reasons.
+          </Text>
+          <Pressable onPress={() => router.replace("/")} style={styles.primaryBtn}>
+            <Text style={styles.primaryBtnText}>Volver</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    const remainingAttempts = Math.max(0, 3 - failedAttempts);
     return (
       <View style={[styles.center, { paddingHorizontal: spacing.xxl }]}>
         <View style={styles.lockIcon}>
@@ -109,7 +180,14 @@ export default function Admin() {
           style={styles.input}
           testID="admin-key-input"
         />
-        {error ? <Text style={styles.errText}>{error}</Text> : null}
+        {error ? (
+          <Text style={styles.errText}>
+            {error}
+            {failedAttempts > 0 && failedAttempts < 3
+              ? `  ·  ${remainingAttempts} intento${remainingAttempts === 1 ? "" : "s"} restante${remainingAttempts === 1 ? "" : "s"} antes de bloqueo`
+              : ""}
+          </Text>
+        ) : null}
         <Pressable
           onPress={doLogin}
           style={[styles.primaryBtn, busy && { opacity: 0.6 }]}
@@ -146,11 +224,13 @@ export default function Admin() {
           [
             { k: "sales", label: "Ventas", icon: "bar-chart-2" },
             { k: "access", label: "Acceso", icon: "user-check" },
+            { k: "routes", label: "Rutas", icon: "map" },
             { k: "agencies", label: "Agencias", icon: "briefcase" },
             { k: "restaurants", label: "Restaurantes", icon: "coffee" },
             { k: "rentcars", label: "Rent a Car", icon: "truck" },
             { k: "emergencies", label: "Emergencias", icon: "alert-triangle" },
             { k: "song", label: "Canción", icon: "music" },
+            { k: "security", label: "Seguridad", icon: "shield" },
           ] as { k: Tab; label: string; icon: any }[]
         ).map((t) => {
           const active = tab === t.k;
@@ -176,8 +256,12 @@ export default function Admin() {
         <SalesTab adminKey={key} />
       ) : tab === "access" ? (
         <AccessTab adminKey={key} />
+      ) : tab === "routes" ? (
+        <RoutesTab adminKey={key} />
       ) : tab === "song" ? (
         <SongTab adminKey={key} />
+      ) : tab === "security" ? (
+        <SecurityTab adminKey={key} onKeyChanged={(newKey) => setKey(newKey)} />
       ) : (
         <ContentTab adminKey={key} collection={tab} />
       )}
@@ -189,6 +273,10 @@ export default function Admin() {
 function SalesTab({ adminKey }: { adminKey: string }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [resetting, setResetting] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState("");
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
   const load = useCallback(async () => {
@@ -205,6 +293,26 @@ function SalesTab({ adminKey }: { adminKey: string }) {
     load();
   }, [load]);
 
+  const doReset = async () => {
+    if (resetConfirm !== "RESET") {
+      setResetMsg("Escribe RESET exactamente para confirmar.");
+      return;
+    }
+    setResetting(true);
+    setResetMsg(null);
+    try {
+      const r = await adminRequest("/admin/reset-sales", adminKey, "POST", { confirm: "RESET" });
+      setResetMsg(`✅ Borradas ${r.transactions_removed} ventas y ${r.grants_removed} accesos.`);
+      setShowReset(false);
+      setResetConfirm("");
+      await load();
+    } catch (e: any) {
+      setResetMsg(e?.message || "Error");
+    } finally {
+      setResetting(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -214,54 +322,113 @@ function SalesTab({ adminKey }: { adminKey: string }) {
   }
 
   return (
-    <ScrollView
-      contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl, gap: spacing.md }}
-    >
-      <View style={styles.totalCard}>
-        <Text style={styles.totalLabel}>TOTAL RECAUDADO</Text>
-        <Text style={styles.totalValue}>{CLP(data?.total_clp || 0)}</Text>
-        <Text style={styles.totalMeta}>
-          {data?.sales_count || 0} ventas · {data?.pending_count || 0} pendientes
-        </Text>
-      </View>
-
-      <Text style={styles.sectionTitle}>Ventas por producto</Text>
-      {Object.entries(data?.by_product || {}).map(([pid, info]: any) => (
-        <View key={pid} style={styles.row}>
-          <Feather name="box" size={16} color={colors.brand} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.rowName}>{info.name || pid}</Text>
-            <Text style={styles.rowSub}>{info.count} venta{info.count === 1 ? "" : "s"}</Text>
-          </View>
-          <Text style={styles.rowVal}>{CLP(info.total_clp)}</Text>
+    <>
+      <ScrollView
+        contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl, gap: spacing.md }}
+      >
+        <View style={styles.totalCard}>
+          <Text style={styles.totalLabel}>TOTAL RECAUDADO</Text>
+          <Text style={styles.totalValue}>{CLP(data?.total_clp || 0)}</Text>
+          <Text style={styles.totalMeta}>
+            {data?.sales_count || 0} ventas · {data?.pending_count || 0} pendientes
+          </Text>
         </View>
-      ))}
 
-      <Text style={styles.sectionTitle}>Últimas ventas</Text>
-      {(data?.recent || []).length === 0 ? (
-        <Text style={styles.empty}>Sin transacciones todavía.</Text>
-      ) : (
-        (data?.recent || []).map((s: any, i: number) => (
-          <View key={i} style={styles.row}>
-            <Feather name="dollar-sign" size={14} color={colors.onSurfaceTertiary} />
+        <Text style={styles.sectionTitle}>Ventas por producto</Text>
+        {Object.entries(data?.by_product || {}).map(([pid, info]: any) => (
+          <View key={pid} style={styles.row}>
+            <Feather name="box" size={16} color={colors.brand} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.rowName}>{CLP(s.amount_clp)}</Text>
-              <Text style={styles.rowSub} numberOfLines={1}>
-                {s.product_name || s.product_id || "—"} · {s.email || "—"}
+              <Text style={styles.rowName}>{info.name || pid}</Text>
+              <Text style={styles.rowSub}>{info.count} venta{info.count === 1 ? "" : "s"}</Text>
+            </View>
+            <Text style={styles.rowVal}>{CLP(info.total_clp)}</Text>
+          </View>
+        ))}
+
+        <Text style={styles.sectionTitle}>Últimas ventas</Text>
+        {(data?.recent || []).length === 0 ? (
+          <Text style={styles.empty}>Sin transacciones todavía.</Text>
+        ) : (
+          (data?.recent || []).map((s: any, i: number) => (
+            <View key={i} style={styles.row}>
+              <Feather name="dollar-sign" size={14} color={colors.onSurfaceTertiary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowName}>{CLP(s.amount_clp)}</Text>
+                <Text style={styles.rowSub} numberOfLines={1}>
+                  {s.product_name || s.product_id || "—"} · {s.email || "—"}
+                </Text>
+              </View>
+              <Text style={styles.rowSub}>
+                {s.paid_at ? new Date(s.paid_at).toLocaleDateString("es-CL") : "—"}
               </Text>
             </View>
-            <Text style={styles.rowSub}>
-              {s.paid_at ? new Date(s.paid_at).toLocaleDateString("es-CL") : "—"}
-            </Text>
-          </View>
-        ))
-      )}
+          ))
+        )}
 
-      <Pressable style={styles.refreshBtn} onPress={load}>
-        <Feather name="refresh-cw" size={14} color={colors.onSurfaceSecondary} />
-        <Text style={styles.refreshText}>Actualizar</Text>
-      </Pressable>
-    </ScrollView>
+        {resetMsg ? (
+          <Text style={[styles.msg, { color: resetMsg.startsWith("✅") ? colors.success : colors.error }]}>
+            {resetMsg}
+          </Text>
+        ) : null}
+
+        <Pressable style={styles.refreshBtn} onPress={load}>
+          <Feather name="refresh-cw" size={14} color={colors.onSurfaceSecondary} />
+          <Text style={styles.refreshText}>Actualizar</Text>
+        </Pressable>
+
+        <View style={{ height: spacing.lg }} />
+
+        <Text style={[styles.sectionTitle, { color: colors.error }]}>Zona peligrosa</Text>
+        <Text style={styles.rowSub}>
+          Borra TODAS las ventas y accesos registrados. Los clientes deberán restaurar acceso o volver a pagar. Acción irreversible.
+        </Text>
+        <Pressable onPress={() => setShowReset(true)} style={styles.dangerBtn} testID="open-reset">
+          <Feather name="trash-2" size={16} color={colors.onBrand} />
+          <Text style={styles.dangerBtnText}>Borrar total recaudado y ventas</Text>
+        </Pressable>
+      </ScrollView>
+
+      <Modal visible={showReset} transparent animationType="slide" onRequestClose={() => setShowReset(false)}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.modalWrap}
+        >
+          <View style={styles.modalBox}>
+            <View style={styles.modalHead}>
+              <Text style={styles.modalTitle}>Reset de ventas</Text>
+              <Pressable onPress={() => setShowReset(false)} hitSlop={12}>
+                <Feather name="x" size={22} color={colors.onSurface} />
+              </Pressable>
+            </View>
+            <Text style={styles.cardSub}>
+              Esta acción borra TODAS las ventas y accesos registrados. No se puede deshacer. Escribe la palabra <Text style={{ fontWeight: "800" }}>RESET</Text> para confirmar.
+            </Text>
+            <TextInput
+              value={resetConfirm}
+              onChangeText={setResetConfirm}
+              placeholder="Escribe RESET"
+              placeholderTextColor={colors.onSurfaceTertiary}
+              style={styles.input}
+              autoCapitalize="characters"
+              testID="reset-confirm-input"
+            />
+            <Pressable
+              onPress={doReset}
+              disabled={resetting}
+              style={[styles.dangerBtn, resetting && { opacity: 0.6 }]}
+              testID="reset-submit"
+            >
+              {resetting ? (
+                <ActivityIndicator color={colors.onBrand} />
+              ) : (
+                <Text style={styles.dangerBtnText}>Confirmar borrado</Text>
+              )}
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </>
   );
 }
 
@@ -332,7 +499,7 @@ function AccessTab({ adminKey }: { adminKey: string }) {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Conceder acceso manual</Text>
         <Text style={styles.cardSub}>
-          Si un cliente pagó por otra vía (transferencia, error de webhook, respaldo tras redeploy), ingrésalo aquí y podrá entrar con "Restaurar acceso" en la app.
+          Si un cliente pagó por otra vía (transferencia, error de webhook, respaldo tras redeploy), ingrésalo aquí y podrá entrar con &quot;Restaurar acceso&quot; en la app.
         </Text>
 
         <Text style={styles.label}>Email del cliente</Text>
@@ -623,6 +790,169 @@ function ContentEditor({
   );
 }
 
+// ============== RUTAS (view-only) ==============
+function RoutesTab({ adminKey }: { adminKey: string }) {
+  const insets = useSafeAreaInsets();
+  const [routes, setRoutes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await adminRequest("/admin/routes", adminKey, "GET");
+        setRoutes(r);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [adminKey]);
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.brand} />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl, gap: spacing.md }}
+    >
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Las 11 rutas GPS</Text>
+        <Text style={styles.cardSub}>
+          Estas son las rutas que ven los clientes con acceso pagado. Las coordenadas y descripción están definidas en el código de la app para máxima estabilidad.
+        </Text>
+      </View>
+      {routes.map((r) => (
+        <View key={r.id} style={styles.itemCard}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.itemName}>{r.name}</Text>
+            <Text style={styles.itemMeta}>
+              📍 {r.type === "urbana" ? "Urbana" : "Rural"} · {r.distance_km} km · {r.duration_min} min · {r.difficulty}
+            </Text>
+            <Text style={styles.itemMeta}>🗿 {r.pois_count} puntos de interés</Text>
+          </View>
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
+// ============== SEGURIDAD (cambiar clave) ==============
+function SecurityTab({ adminKey, onKeyChanged }: { adminKey: string; onKeyChanged: (k: string) => void }) {
+  const insets = useSafeAreaInsets();
+  const [current, setCurrent] = useState("");
+  const [newKey, setNewKey] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const submit = async () => {
+    setMsg(null);
+    if (newKey.length < 6) {
+      setMsg({ ok: false, text: "La nueva clave debe tener al menos 6 caracteres." });
+      return;
+    }
+    if (newKey !== confirm) {
+      setMsg({ ok: false, text: "La nueva clave y su confirmación no coinciden." });
+      return;
+    }
+    setBusy(true);
+    try {
+      await adminRequest("/admin/change-key", adminKey, "POST", {
+        current_key: current,
+        new_key: newKey,
+      });
+      // Actualiza clave activa en el panel
+      await storage.setItem(ADMIN_KEY_STORAGE, newKey);
+      onKeyChanged(newKey);
+      setMsg({ ok: true, text: "✅ Clave actualizada. Úsala la próxima vez que ingreses." });
+      setCurrent("");
+      setNewKey("");
+      setConfirm("");
+    } catch (e: any) {
+      setMsg({ ok: false, text: e?.message || "Error" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ScrollView
+      contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl, gap: spacing.md }}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Cambiar clave del panel</Text>
+        <Text style={styles.cardSub}>
+          Cambia la clave que da acceso a este panel. Solo tú deberías conocerla. Mínimo 6 caracteres.
+        </Text>
+
+        <Text style={styles.label}>Clave actual</Text>
+        <TextInput
+          value={current}
+          onChangeText={setCurrent}
+          secureTextEntry
+          autoCapitalize="none"
+          placeholder="Tu clave actual"
+          placeholderTextColor={colors.onSurfaceTertiary}
+          style={styles.input}
+          testID="current-key"
+        />
+
+        <Text style={styles.label}>Nueva clave</Text>
+        <TextInput
+          value={newKey}
+          onChangeText={setNewKey}
+          secureTextEntry
+          autoCapitalize="none"
+          placeholder="Nueva clave (mín. 6 caracteres)"
+          placeholderTextColor={colors.onSurfaceTertiary}
+          style={styles.input}
+          testID="new-key"
+        />
+
+        <Text style={styles.label}>Confirmar nueva clave</Text>
+        <TextInput
+          value={confirm}
+          onChangeText={setConfirm}
+          secureTextEntry
+          autoCapitalize="none"
+          placeholder="Repite la nueva clave"
+          placeholderTextColor={colors.onSurfaceTertiary}
+          style={styles.input}
+          testID="confirm-key"
+        />
+
+        {msg ? (
+          <Text style={[styles.msg, { color: msg.ok ? colors.success : colors.error }]}>
+            {msg.text}
+          </Text>
+        ) : null}
+
+        <Pressable
+          onPress={submit}
+          disabled={busy}
+          style={[styles.primaryBtn, busy && { opacity: 0.6 }]}
+          testID="change-key-submit"
+        >
+          {busy ? (
+            <ActivityIndicator color={colors.onBrand} />
+          ) : (
+            <Text style={styles.primaryBtnText}>Cambiar clave</Text>
+          )}
+        </Pressable>
+
+        <Text style={[styles.cardSub, { fontStyle: "italic", marginTop: spacing.sm }]}>
+          ⚠️ Anota tu nueva clave en un lugar seguro. Si la olvidas, no hay forma de recuperarla desde la app.
+        </Text>
+      </View>
+    </ScrollView>
+  );
+}
+
 // ============== CANCIÓN ==============
 function SongTab({ adminKey }: { adminKey: string }) {
   const insets = useSafeAreaInsets();
@@ -774,6 +1104,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
   primaryBtnText: { color: colors.onBrand, fontSize: 15, fontWeight: "800" },
+  dangerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colors.error,
+    borderRadius: radius.pill,
+    minHeight: 52,
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.sm,
+  },
+  dangerBtnText: { color: colors.onBrand, fontSize: 14, fontWeight: "800" },
   secondaryBtn: {
     flexDirection: "row",
     justifyContent: "center",

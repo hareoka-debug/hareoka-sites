@@ -363,8 +363,7 @@ export default function Hub() {
           style={styles.adminLink}
           testID="admin-link"
         >
-          <Feather name="settings" size={12} color={colors.onSurfaceTertiary} />
-          <Text style={styles.adminLinkText}>Panel del dueño · Owner panel</Text>
+          <Text style={styles.adminLinkText}>© Todos los derechos reservados · All rights reserved</Text>
         </Pressable>
         </View>
       </ScrollView>
