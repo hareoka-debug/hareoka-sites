@@ -49,16 +49,32 @@ export default function Admin() {
   const [wiped, setWiped] = useState(false);
 
   const wipeAppData = useCallback(async () => {
-    // "Autodestrucción": borramos TODO el localStorage local, simulando
-    // que la app se ha desinstalado. El intruso pierde su sesión, device_id,
-    // acceso restaurado, etc. En web no podemos desinstalar de verdad, pero
-    // sí resetear a estado de "nueva instalación".
+    // "Autodestrucción" en 2 pasos:
+    // 1) Backend: borrar acceso/pagos del email+device en el servidor
+    //    (aunque el cliente hubiera pagado). No podrá restaurar acceso nunca más.
+    // 2) Local: borrar TODO el localStorage para simular desinstalación.
+    try {
+      const dev = await storage.getItem("rapa-nui-device-id", "");
+      const em = await storage.getItem("rapa-nui-email", "");
+      if (dev) {
+        try {
+          await fetch("/api/access/self-destruct", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ device_id: dev, email: em || null }),
+          });
+        } catch {
+          /* ignore, seguimos con el borrado local */
+        }
+      }
+    } catch {
+      /* ignore */
+    }
     try {
       if (Platform.OS === "web" && typeof window !== "undefined") {
         window.localStorage.clear();
         window.sessionStorage?.clear?.();
       }
-      // Además, limpiamos claves conocidas por si acaso.
       await storage.removeItem("rapa-nui-device-id");
       await storage.removeItem("rapa-nui-paid");
       await storage.removeItem("rapa-nui-email");
@@ -97,22 +113,21 @@ export default function Admin() {
     const ok = await login(key.trim());
     setBusy(false);
     if (!ok) {
-      // 3 intentos fallidos = autodestruir la sesión local del dispositivo
+      // Al 2º intento fallido → autodestruir acceso local + servidor.
+      // Aunque el cliente hubiera pagado, pierde su acceso por intentar
+      // vulnerar la seguridad de la app.
       const attempts = failedAttempts + 1;
-      if (attempts >= 3) {
+      if (attempts >= 2) {
         const msg =
-          "⚠️ ACCESO NO AUTORIZADO DETECTADO ⚠️\n\n" +
-          "Este panel es exclusivo del dueño de la aplicación. " +
-          "Tu intento ha sido registrado.\n\n" +
-          "Por seguridad, la sesión y todos los datos locales de esta app " +
-          "serán eliminados de este dispositivo.";
+          "⚠️ ACCESO NO AUTORIZADO ⚠️\n\n" +
+          "Tu acceso a esta aplicación ha sido eliminado. Si tenías una compra activa, se ha revocado.\n\n" +
+          "Your access to this app has been removed. Any paid access has been revoked.";
         if (Platform.OS === "web" && typeof window !== "undefined") {
           window.alert(msg);
         } else {
-          Alert.alert("Acceso no autorizado", msg);
+          Alert.alert("⚠️", msg);
         }
         await wipeAppData();
-        // Redirigir al home tras el borrado
         setTimeout(() => {
           if (Platform.OS === "web" && typeof window !== "undefined") {
             window.location.href = "/";
@@ -146,11 +161,11 @@ export default function Admin() {
           <View style={[styles.lockIcon, { backgroundColor: colors.error }]}>
             <Feather name="alert-octagon" size={28} color="#FFFFFF" />
           </View>
-          <Text style={styles.loginTitle}>Acceso denegado</Text>
+          <Text style={styles.loginTitle}>⚠️</Text>
           <Text style={[styles.loginSub, { textAlign: "center" }]}>
-            Los datos locales de esta aplicación han sido eliminados por seguridad.
+            Los datos de esta aplicación han sido eliminados de este dispositivo por seguridad.
             {"\n\n"}
-            Local app data has been erased for security reasons.
+            App data erased for security reasons.
           </Text>
           <Pressable onPress={() => router.replace("/")} style={styles.primaryBtn}>
             <Text style={styles.primaryBtnText}>Volver</Text>
@@ -158,7 +173,6 @@ export default function Admin() {
         </View>
       );
     }
-    const remainingAttempts = Math.max(0, 3 - failedAttempts);
     return (
       <View style={[styles.center, { paddingHorizontal: spacing.xxl }]}>
         <View style={styles.discreteIconsRow}>
@@ -177,10 +191,11 @@ export default function Admin() {
         />
         {error ? (
           <Text style={styles.errText}>
-            {error}
-            {failedAttempts > 0 && failedAttempts < 3
-              ? `  ·  ${remainingAttempts} intento${remainingAttempts === 1 ? "" : "s"} restante${remainingAttempts === 1 ? "" : "s"} antes de bloqueo`
-              : ""}
+            {failedAttempts >= 2
+              ? "⚠️ Acceso eliminado."
+              : failedAttempts === 1
+              ? "⚠️ Advertencia: al próximo intento fallido, TU acceso a esta aplicación será eliminado por completo, aunque hayas pagado."
+              : "Código incorrecto."}
           </Text>
         ) : null}
         <Pressable

@@ -803,6 +803,25 @@ async def admin_grant(body: GrantRequest, request: Request):
             "product_id": body.product_id, "email": email}
 
 
+class SelfDestructRequest(BaseModel):
+    device_id: str
+    email: str | None = None
+
+
+@api_router.post("/access/self-destruct")
+async def access_self_destruct(body: SelfDestructRequest):
+    """Elimina TODOS los accesos y compras de este device_id y su email
+    asociado. Se usa cuando alguien intenta forzar el panel del dueño.
+    Aunque el cliente hubiera pagado, pierde el acceso por intentar violarlo.
+    """
+    q_or = [{"device_id": body.device_id}]
+    if body.email:
+        q_or.append({"email": body.email.strip().lower()})
+    r1 = await db.access_grants.delete_many({"$or": q_or})
+    r2 = await db.payment_transactions.delete_many({"$or": q_or})
+    return {"purged_grants": r1.deleted_count, "purged_transactions": r2.deleted_count}
+
+
 class RevokeRequest(BaseModel):
     email: str
 
