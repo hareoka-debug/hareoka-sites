@@ -840,17 +840,29 @@ class ResetSalesRequest(BaseModel):
 
 @api_router.post("/admin/reset-sales")
 async def admin_reset_sales(body: ResetSalesRequest, request: Request):
-    """Borra TODAS las ventas registradas y todos los accesos. Acción irreversible.
+    """Borra las ventas REALES (Mercado Pago / Flow / Stripe) y sus grants
+    asociados. NO toca los accesos manuales que otorgó el admin.
     Requiere confirmación con la palabra RESET."""
     await _verify_admin_async(request)
     if body.confirm != "RESET":
         raise HTTPException(status_code=400, detail="Confirmación inválida. Escribe RESET exactamente.")
-    r1 = await db.payment_transactions.delete_many({})
-    r2 = await db.access_grants.delete_many({})
+    # 1) Encontrar IDs de transacciones reales (NO manuales)
+    real_txs = await db.payment_transactions.find(
+        {"provider": {"$ne": "manual"}}, {"id": 1}
+    ).to_list(10000)
+    real_tx_ids = [t["id"] for t in real_txs]
+    # 2) Borrar SOLO esas transacciones
+    r1 = await db.payment_transactions.delete_many({"provider": {"$ne": "manual"}})
+    # 3) Borrar únicamente los grants derivados de esas compras reales.
+    #    Los grants manuales (los que otorgaste tú desde el panel) NO se tocan.
+    r2 = await db.access_grants.delete_many({"source_tx": {"$in": real_tx_ids}})
+    # 4) Contar accesos manuales que preservamos, para reportarlo al admin.
+    manual_count = await db.payment_transactions.count_documents({"provider": "manual"})
     return {
         "reset": True,
         "transactions_removed": r1.deleted_count,
         "grants_removed": r2.deleted_count,
+        "manual_grants_preserved": manual_count,
     }
 
 

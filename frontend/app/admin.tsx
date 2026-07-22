@@ -299,7 +299,10 @@ function SalesTab({ adminKey }: { adminKey: string }) {
     setResetMsg(null);
     try {
       const r = await adminRequest("/admin/reset-sales", adminKey, "POST", { confirm: "RESET" });
-      setResetMsg(`✅ Borradas ${r.transactions_removed} ventas y ${r.grants_removed} accesos.`);
+      setResetMsg(
+        `✅ Borradas ${r.transactions_removed} venta${r.transactions_removed === 1 ? "" : "s"} real${r.transactions_removed === 1 ? "" : "es"}. ` +
+        `Accesos manuales preservados: ${r.manual_grants_preserved}.`
+      );
       setShowReset(false);
       setResetConfirm("");
       await load();
@@ -378,7 +381,7 @@ function SalesTab({ adminKey }: { adminKey: string }) {
 
         <Text style={[styles.sectionTitle, { color: colors.error }]}>Zona peligrosa</Text>
         <Text style={styles.rowSub}>
-          Borra TODAS las ventas y accesos registrados. Los clientes deberán restaurar acceso o volver a pagar. Acción irreversible.
+          Borra las ventas reales (Mercado Pago / Flow / Stripe) y su historial. Los accesos manuales que tú otorgaste desde el panel se mantienen intactos. Acción irreversible.
         </Text>
         <Pressable onPress={() => setShowReset(true)} style={styles.dangerBtn} testID="open-reset">
           <Feather name="trash-2" size={16} color={colors.onBrand} />
@@ -399,7 +402,7 @@ function SalesTab({ adminKey }: { adminKey: string }) {
               </Pressable>
             </View>
             <Text style={styles.cardSub}>
-              Esta acción borra TODAS las ventas y accesos registrados. No se puede deshacer. Escribe la palabra <Text style={{ fontWeight: "800" }}>RESET</Text> para confirmar.
+              Esta acción borra las ventas REALES cobradas (Mercado Pago / Flow / Stripe) y devuelve el total recaudado a $0. NO borra los accesos manuales que tú otorgaste desde el panel. Escribe la palabra <Text style={{ fontWeight: "800" }}>RESET</Text> para confirmar.
             </Text>
             <TextInput
               value={resetConfirm}
