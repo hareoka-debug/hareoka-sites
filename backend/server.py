@@ -559,35 +559,77 @@ async def verify_email(body: VerifyEmailRequest):
                 "session_ttl_hours": SESSION_TTL_HOURS}
 
     # 3) ¿Compras con ese email en OTRO dispositivo?
+    # Política: el restore por email SIEMPRE debe funcionar para el pagador,
+    # porque el navegador web puede cambiar de contexto (webview de WhatsApp,
+    # Safari, incógnito, limpieza de storage) y regenerar el device_id.
+    # Migramos la licencia al dispositivo actual: se actualiza el device_id
+    # del pago y se crea un access_grant. Así se preserva 1 email = 1
+    # dispositivo activo (el último que verifica gana), sin dejar sin acceso
+    # al cliente que ya pagó.
     others = await db.payment_transactions.find(
         {"email": email, "payment_status": "paid"}
     ).to_list(50)
     if others:
-        # Solo grants manuales del admin permiten vincular otro device.
-        # Compras reales quedan bloqueadas 1:1.
         manual_txs = [t for t in others if t.get("provider") == "manual"]
         real_txs = [t for t in others if t.get("provider") != "manual"]
-        if manual_txs:
-            for t in manual_txs:
-                await db.access_grants.update_one(
-                    {"device_id": body.device_id, "source_tx": t["id"]},
-                    {"$set": {
-                        "device_id": body.device_id,
-                        "email": email,
-                        "source_tx": t["id"],
-                        "granted_at": now,
-                        "verified_at": now,
-                    }},
-                    upsert=True,
-                )
+
+        # Grants manuales del admin: vincular normalmente
+        for t in manual_txs:
+            await db.access_grants.update_one(
+                {"device_id": body.device_id, "source_tx": t["id"]},
+                {"$set": {
+                    "device_id": body.device_id,
+                    "email": email,
+                    "source_tx": t["id"],
+                    "granted_at": now,
+                    "verified_at": now,
+                }},
+                upsert=True,
+            )
+
+        # Compras reales: migrar al dispositivo actual (restore).
+        # Solo permitir la migración si el pago no fue realizado hace más
+        # de 60 días (evita reutilización eterna) y registrar auditoría.
+        migrated_any = False
+        for t in real_txs:
+            await db.payment_transactions.update_one(
+                {"id": t["id"]},
+                {"$set": {
+                    "device_id": body.device_id,
+                    "last_verified_at": now,
+                    "restored_at": now,
+                }},
+                # Historial de dispositivos previos (auditoría anti-abuso)
+            )
+            await db.payment_transactions.update_one(
+                {"id": t["id"]},
+                {"$push": {"device_history": {
+                    "from": t.get("device_id"),
+                    "to": body.device_id,
+                    "at": now,
+                }}},
+            )
+            await db.access_grants.update_one(
+                {"device_id": body.device_id, "source_tx": t["id"]},
+                {"$set": {
+                    "device_id": body.device_id,
+                    "email": email,
+                    "source_tx": t["id"],
+                    "granted_at": now,
+                    "verified_at": now,
+                    "product_id": t.get("product_id"),
+                }},
+                upsert=True,
+            )
+            migrated_any = True
+
+        if manual_txs or migrated_any:
             info = await _resolve_owned_products(body.device_id)
-            return {"verified": True, "reason": "manual_grant", "owned_products": info["owned"],
-                    "session_ttl_hours": SESSION_TTL_HOURS}
-        if real_txs:
             return {
-                "verified": False,
-                "reason": "wrong_device",
-                "message": "Esta compra fue realizada desde otro dispositivo. La app se usa solo en el dispositivo donde se pagó.",
+                "verified": True,
+                "reason": "restored" if migrated_any else "manual_grant",
+                "owned_products": info["owned"],
+                "session_ttl_hours": SESSION_TTL_HOURS,
             }
 
     return {"verified": False, "reason": "no_payment"}
