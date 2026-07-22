@@ -432,7 +432,7 @@ function SalesTab({ adminKey }: { adminKey: string }) {
 function AccessTab({ adminKey }: { adminKey: string }) {
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState("");
-  const [productId, setProductId] = useState("routes-all");
+  const [productId, setProductId] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -442,6 +442,10 @@ function AccessTab({ adminKey }: { adminKey: string }) {
     const em = email.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(em)) {
       setMsg({ ok: false, text: "Ingresa un email válido." });
+      return;
+    }
+    if (!productId) {
+      setMsg({ ok: false, text: "Elige un producto tocando una de las opciones de arriba." });
       return;
     }
     setBusy(true);
@@ -460,6 +464,7 @@ function AccessTab({ adminKey }: { adminKey: string }) {
       });
       setEmail("");
       setNote("");
+      setProductId(null);
     } catch (e: any) {
       setMsg({ ok: false, text: e?.message || "Error de conexión" });
     } finally {
@@ -510,24 +515,30 @@ function AccessTab({ adminKey }: { adminKey: string }) {
           testID="grant-email"
         />
 
-        <Text style={styles.label}>Producto a otorgar</Text>
-        <View style={{ gap: 6 }}>
+        <Text style={styles.label}>Producto a otorgar (elige uno)</Text>
+        <View style={{ gap: 8 }}>
           {PRODUCTS_ADMIN.map((p) => {
             const active = p.id === productId;
             return (
               <Pressable
                 key={p.id}
-                onPress={() => setProductId(p.id)}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setProductId(p.id);
+                  setMsg(null);
+                }}
                 style={[styles.productBtn, active && styles.productBtnActive]}
+                testID={`grant-product-${p.id}`}
               >
-                <Feather
-                  name={active ? "check-circle" : "circle"}
-                  size={16}
-                  color={active ? colors.brand : colors.onSurfaceTertiary}
-                />
-                <Text style={[styles.productBtnText, active && { color: colors.brand, fontWeight: "700" }]}>
+                <View style={[styles.radioOuter, active && styles.radioOuterActive]}>
+                  {active ? <View style={styles.radioInner} /> : null}
+                </View>
+                <Text style={[styles.productBtnText, active && { color: colors.brand, fontWeight: "800" }]}>
                   {p.label}
                 </Text>
+                {active ? (
+                  <Feather name="check" size={20} color={colors.brand} style={{ marginLeft: "auto" }} />
+                ) : null}
               </Pressable>
             );
           })}
@@ -551,11 +562,15 @@ function AccessTab({ adminKey }: { adminKey: string }) {
 
         <Pressable
           onPress={submit}
-          disabled={busy}
-          style={[styles.primaryBtn, busy && { opacity: 0.6 }]}
+          disabled={busy || !productId || !email.trim()}
+          style={[styles.primaryBtn, (busy || !productId || !email.trim()) && { opacity: 0.4 }]}
           testID="grant-submit"
         >
-          {busy ? <ActivityIndicator color={colors.onBrand} /> : <Text style={styles.primaryBtnText}>Conceder acceso</Text>}
+          {busy ? <ActivityIndicator color={colors.onBrand} /> : (
+            <Text style={styles.primaryBtnText}>
+              {productId ? "Conceder acceso" : "Elige un producto arriba"}
+            </Text>
+          )}
         </Pressable>
 
         <Pressable onPress={revoke} disabled={busy} style={styles.secondaryBtn} testID="grant-revoke">
@@ -1208,16 +1223,39 @@ const styles = StyleSheet.create({
   productBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: 10,
+    gap: spacing.md,
+    paddingVertical: 14,
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: colors.border,
-    minHeight: 44,
+    minHeight: 56,
+    backgroundColor: "#FFFFFF",
   },
-  productBtnActive: { backgroundColor: colors.brandTertiary, borderColor: colors.brand },
-  productBtnText: { fontSize: 13, color: colors.onSurface, flex: 1 },
+  productBtnActive: {
+    backgroundColor: colors.brandTertiary,
+    borderColor: colors.brand,
+    borderWidth: 2.5,
+  },
+  productBtnText: { fontSize: 14, color: colors.onSurface, flex: 1 },
+  radioOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: colors.onSurfaceTertiary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  radioOuterActive: {
+    borderColor: colors.brand,
+  },
+  radioInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.brand,
+  },
 
   msg: { fontSize: 13, fontWeight: "500" },
 
