@@ -214,6 +214,7 @@ export default function Admin() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.tabsScroll}
         contentContainerStyle={styles.tabs}
       >
         {(
@@ -432,10 +433,30 @@ function SalesTab({ adminKey }: { adminKey: string }) {
 function AccessTab({ adminKey }: { adminKey: string }) {
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState("");
-  const [productId, setProductId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const toggle = (id: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setMsg(null);
+  };
+
+  const selectAll = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (selected.size === PRODUCTS_ADMIN.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(PRODUCTS_ADMIN.map((p) => p.id)));
+    }
+  };
 
   const submit = async () => {
     setMsg(null);
@@ -444,27 +465,31 @@ function AccessTab({ adminKey }: { adminKey: string }) {
       setMsg({ ok: false, text: "Ingresa un email válido." });
       return;
     }
-    if (!productId) {
-      setMsg({ ok: false, text: "Elige un producto tocando una de las opciones de arriba." });
+    if (selected.size === 0) {
+      setMsg({ ok: false, text: "Elige al menos un producto tocando las opciones de arriba." });
       return;
     }
     setBusy(true);
     try {
-      const res = await adminRequest("/admin/grant", adminKey, "POST", {
-        email: em,
-        product_id: productId,
-        note: note || null,
-      });
-      const productLabel = PRODUCTS_ADMIN.find((p) => p.id === productId)?.label || productId;
+      const productIds = Array.from(selected);
+      let granted = 0;
+      let already = 0;
+      for (const pid of productIds) {
+        const res = await adminRequest("/admin/grant", adminKey, "POST", {
+          email: em,
+          product_id: pid,
+          note: note || null,
+        });
+        if (res.already_had_access) already++;
+        else granted++;
+      }
       setMsg({
         ok: true,
-        text: res.already_had_access
-          ? `${em} ya tenía ${productLabel}`
-          : `Acceso otorgado a ${em}: ${productLabel}`,
+        text: `${em}: ${granted} producto${granted === 1 ? "" : "s"} otorgado${granted === 1 ? "" : "s"}, ${already} ya lo tenía${already === 1 ? "" : "n"}.`,
       });
       setEmail("");
       setNote("");
-      setProductId(null);
+      setSelected(new Set());
     } catch (e: any) {
       setMsg({ ok: false, text: e?.message || "Error de conexión" });
     } finally {
@@ -515,30 +540,30 @@ function AccessTab({ adminKey }: { adminKey: string }) {
           testID="grant-email"
         />
 
-        <Text style={styles.label}>Producto a otorgar (elige uno)</Text>
+        <View style={styles.labelRow}>
+          <Text style={styles.label}>Productos a otorgar (puedes elegir varios)</Text>
+          <Pressable onPress={selectAll} hitSlop={8} testID="select-all">
+            <Text style={styles.selectAllText}>
+              {selected.size === PRODUCTS_ADMIN.length ? "Quitar todos" : "Elegir todos"}
+            </Text>
+          </Pressable>
+        </View>
         <View style={{ gap: 8 }}>
           {PRODUCTS_ADMIN.map((p) => {
-            const active = p.id === productId;
+            const active = selected.has(p.id);
             return (
               <Pressable
                 key={p.id}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setProductId(p.id);
-                  setMsg(null);
-                }}
+                onPress={() => toggle(p.id)}
                 style={[styles.productBtn, active && styles.productBtnActive]}
                 testID={`grant-product-${p.id}`}
               >
-                <View style={[styles.radioOuter, active && styles.radioOuterActive]}>
-                  {active ? <View style={styles.radioInner} /> : null}
+                <View style={[styles.checkbox, active && styles.checkboxActive]}>
+                  {active ? <Feather name="check" size={16} color="#FFFFFF" /> : null}
                 </View>
                 <Text style={[styles.productBtnText, active && { color: colors.brand, fontWeight: "800" }]}>
                   {p.label}
                 </Text>
-                {active ? (
-                  <Feather name="check" size={20} color={colors.brand} style={{ marginLeft: "auto" }} />
-                ) : null}
               </Pressable>
             );
           })}
@@ -562,13 +587,15 @@ function AccessTab({ adminKey }: { adminKey: string }) {
 
         <Pressable
           onPress={submit}
-          disabled={busy || !productId || !email.trim()}
-          style={[styles.primaryBtn, (busy || !productId || !email.trim()) && { opacity: 0.4 }]}
+          disabled={busy || selected.size === 0 || !email.trim()}
+          style={[styles.primaryBtn, (busy || selected.size === 0 || !email.trim()) && { opacity: 0.4 }]}
           testID="grant-submit"
         >
           {busy ? <ActivityIndicator color={colors.onBrand} /> : (
             <Text style={styles.primaryBtnText}>
-              {productId ? "Conceder acceso" : "Elige un producto arriba"}
+              {selected.size === 0
+                ? "Elige al menos 1 producto"
+                : `Conceder acceso (${selected.size} producto${selected.size === 1 ? "" : "s"})`}
             </Text>
           )}
         </Pressable>
@@ -1150,17 +1177,25 @@ const styles = StyleSheet.create({
   topTitle: { fontFamily: serif, fontSize: 20, color: colors.onSurface },
   iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
 
+  tabsScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+  },
   tabs: {
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+    alignItems: "center",
   },
   tab: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 6,
     paddingHorizontal: spacing.md,
-    height: 36,
+    height: 40,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.border,
@@ -1238,6 +1273,32 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
   },
   productBtnText: { fontSize: 14, color: colors.onSurface, flex: 1 },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: colors.onSurfaceTertiary,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  checkboxActive: {
+    borderColor: colors.brand,
+    backgroundColor: colors.brand,
+  },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing.sm,
+  },
+  selectAllText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.brand,
+    textDecorationLine: "underline",
+  },
   radioOuter: {
     width: 22,
     height: 22,
