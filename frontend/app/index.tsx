@@ -31,6 +31,7 @@ import {
   Providers,
   checkAccessDetailed,
   checkPaymentStatus,
+  claimTransaction,
   clearPendingSession,
   createCheckout,
   fetchProducts,
@@ -151,6 +152,16 @@ export default function Hub() {
         try {
           const st = await checkPaymentStatus(pending);
           if (st.payment_status === "paid") {
+            // Auto-reclamo por tx: vincula el pago a este dispositivo
+            // aunque el navegador haya cambiado tras Flow/Stripe/MP.
+            try {
+              const claimed = await claimTransaction(pending, dev);
+              if (claimed?.email) {
+                await storage.setItem("rapa-nui-email", claimed.email);
+              }
+            } catch {
+              /* ignore */
+            }
             await clearPendingSession();
             const acc = await checkAccessDetailed(dev);
             setAccess(acc);

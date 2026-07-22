@@ -522,6 +522,69 @@ class VerifyEmailRequest(BaseModel):
     email: str
 
 
+class ClaimTxRequest(BaseModel):
+    device_id: str
+
+
+@api_router.post("/payments/claim/{tx_id}")
+async def claim_transaction(tx_id: str, body: ClaimTxRequest):
+    """Vincula el dispositivo actual a una transacción pagada. Se llama
+    tras el retorno de Flow/Stripe/MercadoPago para conceder acceso
+    inmediato aunque el navegador haya cambiado (webview de WhatsApp, etc.)
+    """
+    doc = await db.payment_transactions.find_one(
+        {"$or": [{"id": tx_id}, {"session_id": tx_id}]}
+    )
+    if not doc:
+        return {"claimed": False, "reason": "not_found"}
+    if doc.get("payment_status") != "paid":
+        return {"claimed": False, "reason": "not_paid"}
+
+    now = datetime.now(timezone.utc).isoformat()
+    if doc.get("device_id") != body.device_id:
+        await db.payment_transactions.update_one(
+            {"id": doc["id"]},
+            {
+                "$set": {
+                    "device_id": body.device_id,
+                    "last_verified_at": now,
+                    "restored_at": now,
+                },
+                "$push": {
+                    "device_history": {
+                        "from": doc.get("device_id"),
+                        "to": body.device_id,
+                        "at": now,
+                        "via": "claim",
+                    }
+                },
+            },
+        )
+    else:
+        await db.payment_transactions.update_one(
+            {"id": doc["id"]}, {"$set": {"last_verified_at": now}}
+        )
+    await db.access_grants.update_one(
+        {"device_id": body.device_id, "source_tx": doc["id"]},
+        {
+            "$set": {
+                "device_id": body.device_id,
+                "email": doc.get("email"),
+                "source_tx": doc["id"],
+                "product_id": doc.get("product_id"),
+                "granted_at": now,
+                "verified_at": now,
+            }
+        },
+        upsert=True,
+    )
+    return {
+        "claimed": True,
+        "email": doc.get("email"),
+        "product_id": doc.get("product_id"),
+    }
+
+
 @api_router.post("/payments/verify-email")
 async def verify_email(body: VerifyEmailRequest):
     """Verifica que este dispositivo + email tienen acceso, renueva sesión.

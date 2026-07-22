@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { checkPaymentStatus, clearPendingSession, verifyEmailOnly, getDeviceId } from "@/src/lib/api";
+import { checkPaymentStatus, claimTransaction, clearPendingSession, verifyEmailOnly, getDeviceId } from "@/src/lib/api";
 import { storage } from "@/src/utils/storage";
 import { colors, radius, serif, spacing } from "@/src/lib/theme";
 
@@ -28,13 +28,23 @@ export default function PaymentSuccess() {
           const s = await checkPaymentStatus(tx);
           if (s.payment_status === "paid") {
             await clearPendingSession();
-            const email = await storage.getItem("rapa-nui-email", "");
-            if (email) {
-              try {
-                const dev = await getDeviceId();
-                await verifyEmailOnly(dev, email);
-              } catch {
-                /* ignore */
+            const dev = await getDeviceId();
+            // Auto-reclamo: vincula esta compra al dispositivo actual
+            // aunque el navegador haya cambiado (webview de WhatsApp).
+            try {
+              const claimed = await claimTransaction(tx, dev);
+              if (claimed?.email) {
+                await storage.setItem("rapa-nui-email", claimed.email);
+              }
+            } catch {
+              /* fallback: intentar por email guardado */
+              const email = await storage.getItem("rapa-nui-email", "");
+              if (email) {
+                try {
+                  await verifyEmailOnly(dev, email);
+                } catch {
+                  /* ignore */
+                }
               }
             }
             setProductId(s.product_id || "");

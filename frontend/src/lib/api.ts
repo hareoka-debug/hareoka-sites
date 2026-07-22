@@ -161,6 +161,12 @@ export const checkPaymentStatus = (txId: string) =>
     `/payments/status/${txId}`,
   );
 
+export const claimTransaction = (txId: string, deviceId: string) =>
+  post<{ claimed: boolean; reason?: string; email?: string; product_id?: string }>(
+    `/payments/claim/${txId}`,
+    { device_id: deviceId },
+  );
+
 // ---------------- Contenido ----------------
 export interface ContentItem {
   id: string;
