@@ -1,3 +1,10 @@
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
@@ -46,13 +53,13 @@ const PRODUCT_IMAGE: Record<string, string> = {
   "routes-all":
     "https://images.unsplash.com/photo-1579665063783-77579f0a38a3?crop=entropy&cs=srgb&fm=jpg&q=85",
   agencies:
-    "https://images.pexels.com/photos/31109688/pexels-photo-31109688.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Playa_Anakena_-_panoramio.jpg/960px-Playa_Anakena_-_panoramio.jpg",
   restaurants:
     "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?crop=entropy&cs=srgb&fm=jpg&q=85",
   rentcars:
     "https://images.unsplash.com/photo-1577739156682-d3a82b8dea28?crop=entropy&cs=srgb&fm=jpg&q=85",
   song:
-    "https://images.unsplash.com/photo-1518709594023-6eab9bab7b23?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/Wild_Horses_of_Easter_Island.jpg/960px-Wild_Horses_of_Easter_Island.jpg",
   emergencies:
     "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?crop=entropy&cs=srgb&fm=jpg&q=85",
 };
@@ -86,6 +93,23 @@ const PRODUCT_ICON: Record<string, any> = {
 export default function Hub() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  // Animación pulsante para destacar "Las 11 Rutas Completas"
+  const pulse = useSharedValue(1);
+  useEffect(() => {
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1.03, { duration: 900 }),
+        withTiming(1, { duration: 900 }),
+      ),
+      -1,
+      true,
+    );
+  }, [pulse]);
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulse.value }],
+    shadowOpacity: 0.15 + (pulse.value - 1) * 6,
+  }));
 
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
@@ -275,60 +299,82 @@ export default function Hub() {
         {products.map((p) => {
           const owned = ownedProducts.has(p.id);
           const isFree = p.amount_clp === 0;
+          const isHighlighted = p.id === "routes-all";
+          const isRestaurants = p.id === "restaurants";
+
+          const CardWrapper: any = isHighlighted ? Animated.View : View;
+          const wrapperExtraStyle: any = isHighlighted
+            ? [pulseStyle, styles.highlightedCardOuter]
+            : undefined;
+
           return (
-            <Pressable
-              key={p.id}
-              onPress={() => openProduct(p)}
-              style={({ pressed }) => [
-                styles.card,
-                pressed && { opacity: 0.9 },
-              ]}
-              testID={`product-${p.id}`}
-            >
-              <Image
-                source={{ uri: PRODUCT_IMAGE[p.id] }}
-                style={styles.cardImage}
-                contentFit="cover"
-              />
-              <View style={styles.cardImageOverlay} />
-              <View style={styles.cardImageBadges}>
-                <View style={[styles.cardIconMini, { backgroundColor: p.color }]}>
-                  <Feather name={PRODUCT_ICON[p.id] || "box"} size={16} color="#FFFFFF" />
+            <CardWrapper key={p.id} style={wrapperExtraStyle}>
+              {isHighlighted ? (
+                <View style={styles.hotBadge}>
+                  <Feather name="star" size={11} color="#FFFFFF" />
+                  <Text style={styles.hotBadgeText}>MÁS COMPLETO · BEST VALUE</Text>
                 </View>
-                {owned || isFree ? (
-                  <View style={[styles.tag, styles.tagOk]}>
-                    <Feather name="unlock" size={11} color={colors.onBrand} />
-                    <Text style={styles.tagOkText}>{isFree ? "GRATIS" : "ACTIVO"}</Text>
+              ) : null}
+              <Pressable
+                onPress={() => openProduct(p)}
+                style={({ pressed }) => [
+                  styles.card,
+                  isHighlighted && styles.cardHighlighted,
+                  pressed && { opacity: 0.9 },
+                ]}
+                testID={`product-${p.id}`}
+              >
+                <Image
+                  source={{ uri: PRODUCT_IMAGE[p.id] }}
+                  style={styles.cardImage}
+                  contentFit="cover"
+                />
+                <View style={styles.cardImageOverlay} />
+                <View style={styles.cardImageBadges}>
+                  <View style={[styles.cardIconMini, { backgroundColor: p.color }]}>
+                    <Feather name={PRODUCT_ICON[p.id] || "box"} size={16} color="#FFFFFF" />
                   </View>
-                ) : (
-                  <View style={[styles.tag, styles.tagPrice]}>
-                    <Text style={styles.tagPriceText}>
-                      ${p.amount_clp.toLocaleString("es-CL")}
+                  {owned ? (
+                    <View style={[styles.tag, styles.tagOk]}>
+                      <Feather name="unlock" size={11} color={colors.onBrand} />
+                      <Text style={styles.tagOkText}>ACTIVO</Text>
+                    </View>
+                  ) : !isFree ? (
+                    <View style={[styles.tag, styles.tagPrice]}>
+                      <Text style={styles.tagPriceText}>
+                        ${p.amount_clp.toLocaleString("es-CL")}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+                <View style={styles.cardBody}>
+                  <Text style={styles.cardName} numberOfLines={2}>
+                    {p.name}
+                  </Text>
+                  {p.name_en ? (
+                    <Text style={styles.cardNameEn} numberOfLines={2}>
+                      {p.name_en}
                     </Text>
+                  ) : null}
+                  <Text
+                    style={[
+                      styles.cardShort,
+                      isRestaurants && styles.cardShortHighlight,
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {p.short}
+                    {p.short_en ? `  ·  ${p.short_en}` : ""}
+                  </Text>
+                  <View style={styles.cardAction}>
+                    <Text style={[styles.cardActionText, { color: p.color }]}>
+                      {owned || isFree ? "Ver contenido · View" : "Comprar acceso · Buy"}
+                    </Text>
+                    <Feather name="chevron-right" size={16} color={p.color} />
                   </View>
-                )}
-              </View>
-              <View style={styles.cardBody}>
-                <Text style={styles.cardName} numberOfLines={2}>
-                  {p.name}
-                </Text>
-                {p.name_en ? (
-                  <Text style={styles.cardNameEn} numberOfLines={2}>
-                    {p.name_en}
-                  </Text>
-                ) : null}
-                <Text style={styles.cardShort} numberOfLines={2}>
-                  {p.short}
-                  {p.short_en ? `  ·  ${p.short_en}` : ""}
-                </Text>
-                <View style={styles.cardAction}>
-                  <Text style={[styles.cardActionText, { color: p.color }]}>
-                    {owned || isFree ? "Ver contenido · View" : "Comprar acceso · Buy"}
-                  </Text>
-                  <Feather name="chevron-right" size={16} color={p.color} />
                 </View>
-              </View>
-            </Pressable>
+              </Pressable>
+            </CardWrapper>
           );
         })}
 
@@ -663,6 +709,39 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   cardShort: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 2, marginBottom: 6 },
+  cardShortHighlight: {
+    fontSize: 14,
+    color: "#E63946",
+    fontWeight: "800",
+    fontStyle: "italic",
+  },
+  highlightedCardOuter: {
+    marginBottom: spacing.lg,
+    shadowColor: "#8B3A2E",
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  cardHighlighted: {
+    borderWidth: 2.5,
+    borderColor: "#8B3A2E",
+    marginBottom: 0,
+  },
+  hotBadge: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#8B3A2E",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderTopLeftRadius: radius.md,
+    borderTopRightRadius: radius.md,
+    marginLeft: spacing.sm,
+    zIndex: 2,
+    transform: [{ translateY: 8 }],
+  },
+  hotBadgeText: { color: "#FFFFFF", fontSize: 10, fontWeight: "800", letterSpacing: 0.8 },
   cardAction: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
   cardActionText: { fontSize: 14, fontWeight: "700" },
   tag: {
