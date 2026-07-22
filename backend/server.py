@@ -699,8 +699,10 @@ async def _verify_admin_async(request: Request):
 @api_router.get("/admin/sales")
 async def admin_sales(request: Request):
     await _verify_admin_async(request)
+    # SOLO cuentan las ventas REALES (Mercado Pago / Flow / Stripe). Los accesos
+    # manuales del admin NO son ventas, son cortesías, y no aparecen aquí.
     paid = await db.payment_transactions.find(
-        {"payment_status": "paid"},
+        {"payment_status": "paid", "provider": {"$ne": "manual"}},
         {"_id": 0, "provider": 1, "amount_clp": 1, "paid_at": 1, "device_id": 1, "email": 1,
          "id": 1, "product_id": 1, "product_name": 1},
     ).sort("paid_at", -1).to_list(500)
@@ -722,12 +724,16 @@ async def admin_sales(request: Request):
 
     pending_count = await db.payment_transactions.count_documents({"payment_status": "pending"})
     granted_count = await db.access_grants.count_documents({})
+    manual_grants_count = await db.payment_transactions.count_documents(
+        {"provider": "manual", "payment_status": "paid"}
+    )
 
     return {
         "total_clp": total,
         "sales_count": len(paid),
         "pending_count": pending_count,
         "granted_count": granted_count,
+        "manual_grants_count": manual_grants_count,
         "by_provider": by_provider,
         "by_product": by_product,
         "recent": [

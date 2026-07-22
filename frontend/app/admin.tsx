@@ -161,15 +161,14 @@ export default function Admin() {
     const remainingAttempts = Math.max(0, 3 - failedAttempts);
     return (
       <View style={[styles.center, { paddingHorizontal: spacing.xxl }]}>
-        <View style={styles.lockIcon}>
-          <Feather name="lock" size={28} color={colors.onBrand} />
+        <View style={styles.discreteIconsRow}>
+          <Feather name="lock" size={26} color={colors.onSurface} />
+          <Feather name="alert-triangle" size={26} color={colors.warning} />
         </View>
-        <Text style={styles.loginTitle}>Panel del Dueño</Text>
-        <Text style={styles.loginSub}>Acceso exclusivo del administrador.</Text>
         <TextInput
           value={key}
           onChangeText={setKey}
-          placeholder="Clave de administrador"
+          placeholder="••••••"
           placeholderTextColor={colors.onSurfaceTertiary}
           secureTextEntry
           autoCapitalize="none"
@@ -190,7 +189,14 @@ export default function Admin() {
           disabled={busy}
           testID="admin-login"
         >
-          {busy ? <ActivityIndicator color={colors.onBrand} /> : <Text style={styles.primaryBtnText}>Entrar</Text>}
+          {busy ? (
+            <ActivityIndicator color={colors.onBrand} />
+          ) : (
+            <View style={styles.hivamanaRow}>
+              <Text style={styles.primaryBtnText}>HIVAMANA</Text>
+              <Feather name="alert-triangle" size={16} color={colors.onBrand} />
+            </View>
+          )}
         </Pressable>
         <Pressable onPress={() => router.replace("/")} hitSlop={12}>
           <Text style={styles.backLink}>Volver a la app</Text>
@@ -291,7 +297,7 @@ function SalesTab({ adminKey }: { adminKey: string }) {
   }, [load]);
 
   const doReset = async () => {
-    if (resetConfirm !== "RESET") {
+    if (resetConfirm.trim().toUpperCase() !== "RESET") {
       setResetMsg("Escribe RESET exactamente para confirmar.");
       return;
     }
@@ -307,7 +313,7 @@ function SalesTab({ adminKey }: { adminKey: string }) {
       setResetConfirm("");
       await load();
     } catch (e: any) {
-      setResetMsg(e?.message || "Error");
+      setResetMsg(e?.message || "Error al borrar. Verifica tu conexión e intenta de nuevo.");
     } finally {
       setResetting(false);
     }
@@ -330,8 +336,13 @@ function SalesTab({ adminKey }: { adminKey: string }) {
           <Text style={styles.totalLabel}>TOTAL RECAUDADO</Text>
           <Text style={styles.totalValue}>{CLP(data?.total_clp || 0)}</Text>
           <Text style={styles.totalMeta}>
-            {data?.sales_count || 0} ventas · {data?.pending_count || 0} pendientes
+            {data?.sales_count || 0} venta{data?.sales_count === 1 ? "" : "s"} real{data?.sales_count === 1 ? "" : "es"} · {data?.pending_count || 0} pendientes
           </Text>
+          {data?.manual_grants_count > 0 ? (
+            <Text style={[styles.totalMeta, { marginTop: 4, fontStyle: "italic" }]}>
+              🎫 {data.manual_grants_count} acceso{data.manual_grants_count === 1 ? "" : "s"} manual{data.manual_grants_count === 1 ? "" : "es"} otorgado{data.manual_grants_count === 1 ? "" : "s"} (no cuentan en total)
+            </Text>
+          ) : null}
         </View>
 
         <Text style={styles.sectionTitle}>Ventas por producto</Text>
@@ -413,6 +424,11 @@ function SalesTab({ adminKey }: { adminKey: string }) {
               autoCapitalize="characters"
               testID="reset-confirm-input"
             />
+            {resetMsg ? (
+              <Text style={[styles.msg, { color: resetMsg.startsWith("✅") ? colors.success : colors.error }]}>
+                {resetMsg}
+              </Text>
+            ) : null}
             <Pressable
               onPress={doReset}
               disabled={resetting}
@@ -1120,6 +1136,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: spacing.md,
+  },
+  discreteIconsRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+    marginBottom: spacing.xl,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  hivamanaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   loginTitle: { fontFamily: serif, fontSize: 26, color: colors.onSurface },
   loginSub: { fontSize: 13, color: colors.onSurfaceTertiary, marginBottom: spacing.md },
