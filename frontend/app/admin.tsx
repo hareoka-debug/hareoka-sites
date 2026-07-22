@@ -86,15 +86,10 @@ export default function Admin() {
   }, []);
 
   useEffect(() => {
-    (async () => {
-      const saved = await storage.getItem(ADMIN_KEY_STORAGE, "");
-      if (saved) {
-        setKey(saved);
-        await login(saved);
-      }
-      setChecking(false);
-    })();
-  }, [login]);
+    // Por seguridad: SIEMPRE se pide la clave al entrar al panel, incluso si el
+    // dueño ya la usó antes en este dispositivo. No autologin.
+    setChecking(false);
+  }, []);
 
   const doLogin = async () => {
     setBusy(true);
@@ -129,11 +124,12 @@ export default function Admin() {
     }
   };
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await storage.removeItem(ADMIN_KEY_STORAGE);
     setLogged(false);
     setKey("");
-  };
+    setError(null);
+  }, []);
 
   if (checking) {
     return (
