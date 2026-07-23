@@ -28,7 +28,18 @@ load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
+# Para conexiones Atlas (mongodb+srv://) es necesario forzar TLS + CA bundle
+# de certifi, si no algunos entornos fallan con SSL handshake internal error.
+if mongo_url.startswith("mongodb+srv://") or "mongodb.net" in mongo_url:
+    import certifi as _certifi
+    client = AsyncIOMotorClient(
+        mongo_url,
+        tls=True,
+        tlsCAFile=_certifi.where(),
+        serverSelectionTimeoutMS=15000,
+    )
+else:
+    client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 app = FastAPI()
