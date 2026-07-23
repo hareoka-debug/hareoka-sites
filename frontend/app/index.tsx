@@ -436,88 +436,114 @@ export default function Hub() {
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={styles.modalWrap}
         >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setBuying(null)}
+          />
           <View style={styles.modalBox}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{buying?.name}</Text>
-              <Pressable onPress={() => setBuying(null)} hitSlop={16} style={styles.modalCloseBtn} testID="close-buy">
-                <Feather name="x" size={20} color={colors.onSurface} />
-              </Pressable>
-            </View>
-            <Text style={styles.modalDesc}>{buying?.description}</Text>
-            {buying?.description_en ? (
-              <Text style={styles.modalDescEn}>{buying.description_en}</Text>
-            ) : null}
-            <Text style={styles.modalPrice}>
-              Precio · Price:{" "}
-              <Text style={{ fontWeight: "800" }}>
-                ${buying?.amount_clp.toLocaleString("es-CL")} CLP
-              </Text>
-            </Text>
-
-            <Text style={styles.label}>Elige medio de pago · Choose payment</Text>
-            <View style={styles.methods}>
-              {METHODS.map((m) => {
-                const enabled = providers?.[m.key as keyof Providers] !== false;
-                const active = buyMethod === m.key;
-                return (
-                  <Pressable
-                    key={m.key}
-                    onPress={() => enabled && setBuyMethod(m.key)}
-                    style={[
-                      styles.methodBtn,
-                      active && styles.methodBtnActive,
-                      !enabled && { opacity: 0.4 },
-                    ]}
-                    testID={`method-${m.key}`}
-                  >
-                    <Feather
-                      name={m.icon}
-                      size={18}
-                      color={active ? colors.brand : colors.onSurfaceSecondary}
-                    />
-                    <Text style={[styles.methodLabel, active && { color: colors.brand }]}>
-                      {m.label}
-                    </Text>
-                    <Text style={styles.methodSub}>{m.sub}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <Text style={styles.label}>Tu email (para respaldar tu compra) · Your email</Text>
-            <TextInput
-              value={buyEmail}
-              onChangeText={setBuyEmail}
-              placeholder="tu@correo.com"
-              placeholderTextColor={colors.onSurfaceTertiary}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              style={styles.input}
-              testID="buy-email"
-            />
-            {buyError ? <Text style={styles.errorText}>{buyError}</Text> : null}
-
+            {/* Botón flotante SIEMPRE visible */}
             <Pressable
-              onPress={submitBuy}
-              disabled={buyBusy}
-              style={[styles.payBtn, buyBusy && { opacity: 0.6 }]}
-              testID="buy-submit"
+              onPress={() => setBuying(null)}
+              hitSlop={16}
+              style={styles.modalFloatingClose}
+              testID="close-buy"
             >
-              {buyBusy ? (
-                <ActivityIndicator color={colors.onBrand} />
-              ) : (
-                <Text style={styles.payBtnText}>
-                  Pagar · Pay ${buying?.amount_clp.toLocaleString("es-CL")} CLP
-                </Text>
-              )}
+              <Feather name="chevron-down" size={22} color={colors.onSurface} />
             </Pressable>
-            <Text style={styles.modalHint}>
-              Se abrirá la página segura de {METHODS.find((x) => x.key === buyMethod)?.label}. Al volver, tu acceso queda activo.
-              {"\n"}
-              <Text style={{ fontStyle: "italic" }}>
-                You will be redirected to {METHODS.find((x) => x.key === buyMethod)?.label}. When you return, your access is active.
+            <ScrollView
+              contentContainerStyle={{ paddingBottom: spacing.xl }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{buying?.name}</Text>
+              </View>
+              <Text style={styles.modalDesc}>{buying?.description}</Text>
+              {buying?.description_en ? (
+                <Text style={styles.modalDescEn}>{buying.description_en}</Text>
+              ) : null}
+              <Text style={styles.modalPrice}>
+                Precio · Price:{" "}
+                <Text style={{ fontWeight: "800" }}>
+                  ${buying?.amount_clp.toLocaleString("es-CL")} CLP
+                </Text>
               </Text>
-            </Text>
+
+              <Text style={styles.label}>Elige medio de pago · Choose payment</Text>
+              <View style={styles.methods}>
+                {METHODS.map((m) => {
+                  const enabled = providers?.[m.key as keyof Providers] !== false;
+                  const active = buyMethod === m.key;
+                  return (
+                    <Pressable
+                      key={m.key}
+                      onPress={() => enabled && setBuyMethod(m.key)}
+                      style={[
+                        styles.methodBtn,
+                        active && styles.methodBtnActive,
+                        !enabled && { opacity: 0.4 },
+                      ]}
+                      testID={`method-${m.key}`}
+                    >
+                      <Feather
+                        name={m.icon}
+                        size={18}
+                        color={active ? colors.brand : colors.onSurfaceSecondary}
+                      />
+                      <Text style={[styles.methodLabel, active && { color: colors.brand }]}>
+                        {m.label}
+                      </Text>
+                      <Text style={styles.methodSub}>{m.sub}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.label}>Tu email (para respaldar tu compra) · Your email</Text>
+              <TextInput
+                value={buyEmail}
+                onChangeText={setBuyEmail}
+                placeholder="tu@correo.com"
+                placeholderTextColor={colors.onSurfaceTertiary}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                style={styles.input}
+                testID="buy-email"
+              />
+              {buyError ? <Text style={styles.errorText}>{buyError}</Text> : null}
+
+              <Pressable
+                onPress={submitBuy}
+                disabled={buyBusy}
+                style={[styles.payBtn, buyBusy && { opacity: 0.6 }]}
+                testID="buy-submit"
+              >
+                {buyBusy ? (
+                  <ActivityIndicator color={colors.onBrand} />
+                ) : (
+                  <Text style={styles.payBtnText}>
+                    Pagar · Pay ${buying?.amount_clp.toLocaleString("es-CL")} CLP
+                  </Text>
+                )}
+              </Pressable>
+              <Text style={styles.modalHint}>
+                Se abrirá la página segura de {METHODS.find((x) => x.key === buyMethod)?.label}. Al volver, tu acceso queda activo.
+                {"\n"}
+                <Text style={{ fontStyle: "italic" }}>
+                  You will be redirected to {METHODS.find((x) => x.key === buyMethod)?.label}. When you return, your access is active.
+                </Text>
+              </Text>
+
+              {/* Botón de volver secundario dentro del modal */}
+              <Pressable
+                onPress={() => setBuying(null)}
+                style={styles.modalCancel}
+                testID="cancel-buy"
+              >
+                <Feather name="arrow-left" size={16} color={colors.onSurfaceSecondary} />
+                <Text style={styles.modalCancelText}>Volver · Back</Text>
+              </Pressable>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -533,42 +559,65 @@ export default function Hub() {
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={styles.modalWrap}
         >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setShowRestore(false)}
+          />
           <View style={styles.modalBox}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Restaurar acceso · Restore access</Text>
-              <Pressable onPress={() => setShowRestore(false)} hitSlop={16} style={styles.modalCloseBtn} testID="close-restore">
-                <Feather name="x" size={20} color={colors.onSurface} />
-              </Pressable>
-            </View>
-            <Text style={styles.modalDesc}>
-              Ingresa el email con el que pagaste. Renovamos tu sesión por 30 días en este dispositivo.
-            </Text>
-            <Text style={styles.modalDescEn}>
-              Enter the email you paid with. We renew your session for 30 days on this device.
-            </Text>
-            <TextInput
-              value={restoreEmail}
-              onChangeText={setRestoreEmail}
-              placeholder="tu@correo.com"
-              placeholderTextColor={colors.onSurfaceTertiary}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              style={styles.input}
-              testID="restore-email-input"
-            />
-            {restoreError ? <Text style={styles.errorText}>{restoreError}</Text> : null}
             <Pressable
-              onPress={submitRestore}
-              disabled={restoreBusy}
-              style={[styles.payBtn, restoreBusy && { opacity: 0.6 }]}
-              testID="restore-submit"
+              onPress={() => setShowRestore(false)}
+              hitSlop={16}
+              style={styles.modalFloatingClose}
+              testID="close-restore"
             >
-              {restoreBusy ? (
-                <ActivityIndicator color={colors.onBrand} />
-              ) : (
-                <Text style={styles.payBtnText}>Verificar y entrar · Verify & enter</Text>
-              )}
+              <Feather name="chevron-down" size={22} color={colors.onSurface} />
             </Pressable>
+            <ScrollView
+              contentContainerStyle={{ paddingBottom: spacing.xl }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Restaurar acceso · Restore access</Text>
+              </View>
+              <Text style={styles.modalDesc}>
+                Ingresa el email con el que pagaste. Renovamos tu sesión por 30 días en este dispositivo.
+              </Text>
+              <Text style={styles.modalDescEn}>
+                Enter the email you paid with. We renew your session for 30 days on this device.
+              </Text>
+              <TextInput
+                value={restoreEmail}
+                onChangeText={setRestoreEmail}
+                placeholder="tu@correo.com"
+                placeholderTextColor={colors.onSurfaceTertiary}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                style={styles.input}
+                testID="restore-email-input"
+              />
+              {restoreError ? <Text style={styles.errorText}>{restoreError}</Text> : null}
+              <Pressable
+                onPress={submitRestore}
+                disabled={restoreBusy}
+                style={[styles.payBtn, restoreBusy && { opacity: 0.6 }]}
+                testID="restore-submit"
+              >
+                {restoreBusy ? (
+                  <ActivityIndicator color={colors.onBrand} />
+                ) : (
+                  <Text style={styles.payBtnText}>Verificar y entrar · Verify & enter</Text>
+                )}
+              </Pressable>
+              <Pressable
+                onPress={() => setShowRestore(false)}
+                style={styles.modalCancel}
+                testID="cancel-restore"
+              >
+                <Feather name="arrow-left" size={16} color={colors.onSurfaceSecondary} />
+                <Text style={styles.modalCancelText}>Volver · Back</Text>
+              </Pressable>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -820,13 +869,46 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "flex-end",
   },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
   modalBox: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: spacing.xl,
+    paddingTop: spacing.xxl + 8,
     paddingBottom: spacing.xxl,
     gap: spacing.md,
+    maxHeight: "88%",
+  },
+  modalFloatingClose: {
+    position: "absolute",
+    top: 8,
+    alignSelf: "center",
+    left: "50%",
+    marginLeft: -22,
+    width: 44,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceTertiary,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+  },
+  modalCancel: {
+    marginTop: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: spacing.md,
+    minHeight: 44,
+  },
+  modalCancelText: {
+    fontSize: 14,
+    color: colors.onSurfaceSecondary,
+    fontWeight: "600",
   },
   modalHeader: {
     flexDirection: "row",
