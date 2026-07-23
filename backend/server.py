@@ -1178,6 +1178,8 @@ if _FRONTEND_DIST.exists() and (_FRONTEND_DIST / "index.html").exists():
         f'    <meta name="apple-mobile-web-app-title" content="{_APP_NAME}" />\n'
         f'    <meta name="apple-mobile-web-app-capable" content="yes" />\n'
         f'    <meta name="theme-color" content="#B35D4A" />\n'
+        f'    <meta name="google" content="notranslate" />\n'
+        f'    <meta httpEquiv="Content-Language" content="es" />\n'
         f'    <meta property="og:title" content="{_APP_NAME}" />\n'
         f'    <meta property="og:description" content="{_APP_DESC}" />\n'
         f'    <meta property="og:type" content="website" />\n'
@@ -1188,7 +1190,10 @@ if _FRONTEND_DIST.exists() and (_FRONTEND_DIST / "index.html").exists():
     )
     try:
         _INDEX_HTML = (_FRONTEND_DIST / "index.html").read_text(encoding="utf-8")
-        _INDEX_HTML = _INDEX_HTML.replace("<html lang=\"en\"", "<html lang=\"es\"")
+        _INDEX_HTML = _INDEX_HTML.replace(
+            "<html lang=\"en\"",
+            "<html lang=\"es\" translate=\"no\" class=\"notranslate\"",
+        )
         # Habilitar safe-area en iOS Safari (viewport-fit=cover) para que el
         # FAB "Volver" no quede tapado por la barra inferior del navegador.
         if "viewport-fit=cover" not in _INDEX_HTML:

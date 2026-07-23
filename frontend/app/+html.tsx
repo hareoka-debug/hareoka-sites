@@ -4,7 +4,7 @@ import type { PropsWithChildren } from "react";
 
 export default function Root({ children }: PropsWithChildren) {
   return (
-    <html lang="es" style={{ height: "100%" }}>
+    <html lang="es" translate="no" className="notranslate" style={{ height: "100%" }}>
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
@@ -23,6 +23,12 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="apple-mobile-web-app-title" content="Descubre Rapa Nui" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#B35D4A" />
+
+        {/* ---- Desactivar traducción automática del navegador
+             (Google Translate, Chrome iOS, etc.). Evita que traduzca
+             palabras rapanui como HIVAMANA y rompa el flujo. ---- */}
+        <meta name="google" content="notranslate" />
+        <meta httpEquiv="Content-Language" content="es" />
 
         {/* ---- Open Graph (WhatsApp, Facebook, etc.) ---- */}
         <meta property="og:title" content="Descubre Rapa Nui" />
