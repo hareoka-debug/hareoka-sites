@@ -659,6 +659,28 @@ async def admin_list_routes(request: Request):
     ]
 
 
+# --- Canción (upsert) - DEBE ir antes de las rutas genéricas de contenido ---
+class SongIn(BaseModel):
+    title: str
+    artist: str | None = None
+    spotify_url: str
+    description: str | None = None
+
+
+@api_router.get("/admin/content/song/current")
+async def admin_get_song(request: Request):
+    await _check_admin(request)
+    return await get_song()
+
+
+@api_router.post("/admin/content/song")
+async def admin_upsert_song(body: SongIn, request: Request):
+    await _check_admin(request)
+    doc = {"id": "main", **body.dict(exclude_none=True)}
+    await db.content_song.update_one({"id": "main"}, {"$set": doc}, upsert=True)
+    return doc
+
+
 # --- CRUD de contenidos editables ---
 class ContentItem(BaseModel):
     name: str
@@ -714,28 +736,6 @@ async def admin_delete_content(name: str, item_id: str, request: Request):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item no encontrado")
     return {"deleted": True}
-
-
-# --- Canción (upsert) ---
-class SongIn(BaseModel):
-    title: str
-    artist: str | None = None
-    spotify_url: str
-    description: str | None = None
-
-
-@api_router.get("/admin/content/song/current")
-async def admin_get_song(request: Request):
-    await _check_admin(request)
-    return await get_song()
-
-
-@api_router.post("/admin/content/song")
-async def admin_upsert_song(body: SongIn, request: Request):
-    await _check_admin(request)
-    doc = {"id": "main", **body.dict(exclude_none=True)}
-    await db.content_song.update_one({"id": "main"}, {"$set": doc}, upsert=True)
-    return doc
 
 
 # --- Cambio de clave admin ---

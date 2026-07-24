@@ -79,3 +79,22 @@
 - STRIPE_API_KEY agregada a /app/backend/.env ("sk_test_emergent").
 - Tarjeta de prueba: 4242 4242 4242 4242.
 - Diseño: /app/design_guidelines.json (Editorial Light, paleta terracota).
+
+
+## ITERACIÓN 7 (24 ago 2025) — REDISEÑO MULTI-PRODUCTO
+- App transformada de "1 solo pack $3.000" a catálogo de **7 productos bilingüe** (español + inglés):
+  | id | Nombre | Precio |
+  |----|--------|--------|
+  | routes-3 | 3 Rutas Urbanas | $3.000 |
+  | routes-all | Las 11 Rutas Completas (⭐ featured) | $5.000 |
+  | agencies | Agencias de Tour | $3.000 |
+  | restaurants | Restaurantes | $3.000 |
+  | rentcars | Rent a Car | $3.000 |
+  | song | Escucha y descubre la emoción que expresa el pasado (Spotify) | $3.000 |
+  | emergencies | Emergencias | GRATIS (siempre libre) |
+- Backend: catálogo en `backend/content_data.py`, endpoints `/api/products`, `/api/content/{agencies,restaurants,rentcars,emergencies}`, `/api/content/song/current`, checkout ahora recibe `product_id`, `access_grants` es (device_id, product_id).
+- Restaurar acceso: por email (sin código de 4 dígitos). Devuelve todos los productos comprados/otorgados a ese email.
+- Panel admin `/admin` (login "HIVAMANA"): 9 pestañas — Ventas / Acceso (multi-producto) / Rutas (readonly) / Agencias / Restaurantes / Rent a Car / Emergencias / Canción / Seguridad (cambio de clave).
+- Frontend nuevo: bilingüe (es+en), bottom-sheet de compra y de restauración, cards con imagen de portada y badge "MÁS COMPLETO · BEST VALUE" en routes-all.
+- Legacy: rutas GPS (11), banner VAINATIVA, editor de Puntos Vai, integraciones MP/Flow/Stripe, todo intacto.
+- Verificación: 31/33 tests backend PASS, flujo E2E "grant → restore → todo ACTIVO" verificado.

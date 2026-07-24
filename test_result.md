@@ -102,7 +102,7 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Comprehensive backend testing for 'Descubre Rapa Nui' multi-product application with 14 test scenarios covering products, content, payments, admin features, and legacy endpoints."
+user_problem_statement: "Frontend purchase flow testing for 'Descubre Rapa Nui' multi-product application. Testing REAL Mercado Pago and Flow checkout flows from preview URL with 6 test scenarios covering product selection, payment provider redirects, email validation, and free product access."
 
 backend:
   - task: "GET /products endpoint"
@@ -394,28 +394,120 @@ backend:
         comment: "Returns array of 7 water points as expected."
 
 frontend:
-  - task: "Frontend testing"
-    implemented: false
-    working: "NA"
-    file: "N/A"
+  - task: "Mercado Pago checkout flow - Agencias de Tour ($3.000)"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/BuyModal.tsx"
     stuck_count: 0
-    priority: "low"
+    priority: "high"
     needs_retesting: false
     status_history:
       - working: "NA"
+        agent: "main"
+        comment: "Need to test: Open home, click 'Agencias de Tour' card, verify bottom sheet opens with correct product info ($3.000 CLP), select Mercado Pago, enter email, click Pay button, verify redirect to mercadopago.com with correct amount."
+      - working: true
         agent: "testing"
-        comment: "Frontend testing not performed as per testing agent instructions (backend only)."
+        comment: "✅ PASSED: Bottom sheet opens correctly with product title 'Agencias de Tour', price $3.000 CLP visible, Mercado Pago selected by default. Email input works. Pay button redirects to mercadopago.cl with correct amount ($3.000 CLP) and product name visible on MP page. Screenshot: 13-agencies-sheet-retry.png, 14-mercadopago-agencies-retry.png"
+
+  - task: "Mercado Pago checkout flow - Las 11 Rutas Completas ($5.000)"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/BuyModal.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Need to test: Verify different product shows different amount. Click 'Las 11 Rutas Completas' card (featured badge), verify $5.000 CLP in sheet and on Mercado Pago page."
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED: Featured badge 'MÁS COMPLETO · BEST VALUE' visible. Bottom sheet shows correct price $5.000 CLP (different from $3.000). Pay button redirects to mercadopago.cl with correct amount $5.000 CLP visible on MP page. Confirms different products show different amounts correctly. Screenshot: 15-routes-all-sheet-retry.png, 16-mercadopago-routes-all-retry.png"
+
+  - task: "Flow checkout flow - Restaurantes ($3.000)"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/BuyModal.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Need to test: Click 'Restaurantes' card, select Flow payment method, enter email, click Pay, verify redirect to flow.cl with correct amount $3.000 CLP."
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED: Flow payment method selection works. Email input works. Pay button redirects to flow.cl with correct amount $3.000 CLP and product name 'Restaurantes' visible on Flow page. Flow shows multiple payment options (Webpay, bank transfers, etc.). Screenshot: 06-restaurants-flow-sheet.png, 07-flow-restaurants.png"
+
+  - task: "Email validation in BuyModal"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/BuyModal.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Need to test: Open any product sheet, clear email, click Pay - should show error 'Ingresa un email válido.' Try invalid email 'abc123' - should show same error."
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED: Email validation works correctly. Empty email shows error 'Ingresa un email válido.' Invalid email 'abc123' also shows same error message. Error message displays in red below the email input field. Screenshot: 08-email-validation-empty.png, 09-email-validation-invalid.png"
+
+  - task: "Restore access with non-existent email"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/RestoreModal.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Need to test: Click 'Restaurar acceso' link, enter non-existent email 'no-existe-cliente-xyz@test.com', click Verify - should show error 'No encontramos ninguna compra o acceso con ese email.'"
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED: Restore access link opens modal correctly. Email input works. Verify button with non-existent email 'no-existe-cliente-xyz@test.com' shows correct error message 'No encontramos ninguna compra o acceso con ese email.' Error displays in red below the email input. Screenshot: 10-restore-modal.png, 11-restore-error.png"
+
+  - task: "Emergencies product - free access"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/emergencies.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Need to test: Scroll to 'Emergencias' card (badge 'ACTIVO'), click card, should navigate to /emergencies page showing 6 emergency contacts without payment prompt."
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED: Emergencias card has 'ACTIVO' badge visible. Clicking card navigates directly to /emergencies page without payment prompt. Page shows 6 emergency contacts: Armada de Chile (137), Bomberos Rapa Nui (132), Carabineros (133), Hospital Hanga Roa (+56 32 2100 215), PDI Rapa Nui (134), SAMU Ambulancia (131). Each contact has category badge and phone number. Screenshot: 12-emergencies-page.png"
+
+  - task: "Product catalog display"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/index.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Need to test: Home page should load and display 7 product cards with images, names, prices, and badges."
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED: Home page loads correctly with hero section 'Descubre Rapa Nui'. All 7 products visible: Agencias de Tour, Las 11 Rutas Completas (with featured badge 'MÁS COMPLETO · BEST VALUE'), Restaurantes, Emergencias (with 'ACTIVO' badge), and others. Each card shows product image, name (Spanish and English), short description, and price or status badge. Screenshot: 01-home-page.png"
 
 metadata:
   created_by: "testing_agent"
   version: "1.0"
-  test_sequence: 1
-  run_ui: false
-  last_updated: "2026-07-24T05:30:00Z"
+  test_sequence: 2
+  run_ui: true
+  last_updated: "2026-07-24T23:45:00Z"
 
 test_plan:
-  current_focus:
-    - "Song CRUD - POST /admin/content/song"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -423,3 +515,7 @@ test_plan:
 agent_communication:
   - agent: "testing"
     message: "Completed comprehensive backend testing of all 14 test scenarios. 31 out of 33 tests PASSED. Found 1 CRITICAL bug (song endpoint route ordering) and 1 expected limitation (Flow email validation). See detailed results in status_history for each task."
+  - agent: "main"
+    message: "Starting frontend purchase flow testing from preview URL. Testing 7 scenarios covering product display, Mercado Pago checkout, Flow checkout, email validation, restore access, and free product access. All tests will verify UI elements and payment provider redirects WITHOUT completing real payments."
+  - agent: "testing"
+    message: "✅ FRONTEND TESTING COMPLETE - ALL 7 TESTS PASSED. Verified: (1) Product catalog displays all 7 products correctly, (2) Mercado Pago checkout works for Agencias de Tour ($3.000) - redirects to mercadopago.cl with correct amount, (3) Mercado Pago checkout works for Las 11 Rutas Completas ($5.000) - confirms different products show different amounts, (4) Flow checkout works for Restaurantes ($3.000) - redirects to flow.cl with correct amount and product name, (5) Email validation works correctly for empty and invalid emails, (6) Restore access shows correct error for non-existent email, (7) Emergencies product provides free access without payment and shows 6 emergency contacts. NO BUGS FOUND. All payment flows work correctly with REAL production credentials."
