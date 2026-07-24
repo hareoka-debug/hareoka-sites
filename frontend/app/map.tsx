@@ -23,12 +23,12 @@ import { useUserLocation } from "@/src/hooks/use-user-location";
 import {
   RouteData,
   WaterPoint,
-  checkAccess,
+  checkUnlocked,
   fetchRoutes,
   fetchWaterPoints,
   getDeviceId,
-  getLocalPaid,
-  setLocalPaid,
+  getLocalUnlocked,
+  setLocalUnlocked,
 } from "@/src/lib/api";
 import { colors, difficultyColor, radius, serif, spacing } from "@/src/lib/theme";
 import { distanceKm, formatDistance } from "@/src/lib/geo";
@@ -64,23 +64,30 @@ export default function MapScreen() {
 
   const snapPoints = useMemo(() => ["16%", "45%", "85%"], []);
 
+const ROUTES_3_IDS = ["circuito-hanga-roa", "costanera-policarpo-toro", "ana-kai-tangata"];
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
     try {
-      // Guardia de acceso: si no pagó, volver al paywall
-      const paid = await getLocalPaid();
-      if (!paid) {
-        const deviceId = await getDeviceId();
-        const hasAccess = await checkAccess(deviceId);
-        if (!hasAccess) {
-          router.replace("/");
-          return;
-        }
-        await setLocalPaid();
+      // Guardia de acceso multi-producto
+      const deviceId = await getDeviceId();
+      let unlocked: string[] = [];
+      try {
+        unlocked = await checkUnlocked(deviceId);
+        await setLocalUnlocked(unlocked);
+      } catch {
+        unlocked = await getLocalUnlocked();
+      }
+      const hasAll = unlocked.includes("routes-all");
+      const has3 = unlocked.includes("routes-3");
+      if (!hasAll && !has3) {
+        router.replace("/");
+        return;
       }
       const [r, w] = await Promise.all([fetchRoutes(), fetchWaterPoints()]);
-      setRoutes(r);
+      const filteredList = hasAll ? r : r.filter((rt) => ROUTES_3_IDS.includes(rt.id));
+      setRoutes(filteredList);
       setWaterPoints(w);
     } catch {
       setError(true);

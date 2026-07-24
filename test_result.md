@@ -101,3 +101,325 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Comprehensive backend testing for 'Descubre Rapa Nui' multi-product application with 14 test scenarios covering products, content, payments, admin features, and legacy endpoints."
+
+backend:
+  - task: "GET /products endpoint"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Returns 7 products with all required fields (id, name, name_en, short, short_en, description, description_en, amount_clp, kind, image, icon, color). emergencies product has always_free=true and amount_clp=0. routes-all has featured=true and amount_clp=5000."
+
+  - task: "GET /content/{collection} endpoints"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "All 4 content collections working correctly: agencies (5 items), restaurants (3 items), rentcars (2 items), emergencies (6 items). Each item has id and name fields."
+
+  - task: "GET /content/song/current endpoint"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Returns song with all required fields: id, title, artist, spotify_url, description. Song title: 'Descubre Rapa Nui — Episodio Exclusivo'"
+
+  - task: "GET /payments/providers endpoint"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Returns correct provider status: stripe=true, mercadopago=true, flow=true"
+
+  - task: "POST /payments/checkout - Mercado Pago"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Successfully creates Mercado Pago checkout for 'agencies' product. Returns url (mercadopago.com), tx_id, session_id, and product_id."
+
+  - task: "POST /payments/checkout - Flow"
+    implemented: true
+    working: false
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: "Flow API rejects test emails with 400 error: 'El email ingresado no es válido para Flow. Usa un correo real.' This is expected behavior from Flow's production API which validates emails strictly. Tested with both 'test@example.com' and 'juan.perez@gmail.com'. Flow requires real, registered email addresses. This is NOT a bug in our code, but a limitation of testing with Flow's production API."
+
+  - task: "POST /payments/checkout - emergencies product validation"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Correctly rejects checkout for 'emergencies' product with 400 error and message about product being free."
+
+  - task: "POST /payments/checkout - non-existent product validation"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Correctly returns 404 for non-existent product 'no-existe'"
+
+  - task: "GET /payments/access/{device_id} endpoint"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Returns unlocked products for device. For non-existent device, correctly returns only 'emergencies' in unlocked array."
+
+  - task: "Manual access flow - POST /admin/manual-access"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Successfully grants manual access to products (agencies, restaurants) for test email. Returns granted array and email."
+
+  - task: "Manual access flow - GET /admin/manual-access"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Lists all manual access grants. Successfully found test email with correct products array."
+
+  - task: "Manual access flow - POST /payments/restore"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Successfully restores access by email to new device. Returns unlocked array with agencies, restaurants, and emergencies."
+
+  - task: "Manual access flow - POST /admin/manual-access/revoke"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Successfully revokes manual access for email. Returns deleted count > 0."
+
+  - task: "Content CRUD - POST /admin/content/{collection}"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Successfully creates new agency item with name and phone. Returns item with generated id."
+
+  - task: "Content CRUD - PUT /admin/content/{collection}/{id}"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Successfully updates agency item name. Returns updated item."
+
+  - task: "Content CRUD - DELETE /admin/content/{collection}/{id}"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Successfully deletes agency item. Returns deleted: true."
+
+  - task: "Song CRUD - POST /admin/content/song"
+    implemented: true
+    working: false
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: "CRITICAL BUG: Route ordering issue. The endpoint returns 422 error expecting 'name' field instead of 'title'. FastAPI is matching '/admin/content/song' to the generic '/admin/content/{name}' route (line 684) instead of the specific song route (line 733). The generic route uses ContentItem model (requires 'name') while the song route should use SongIn model (requires 'title'). FIX: Move the specific route @api_router.post('/admin/content/song') BEFORE the generic route @api_router.post('/admin/content/{name}') in server.py. FastAPI matches routes in order, so more specific routes must come first."
+
+  - task: "Admin authentication - GET /admin/sales"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Admin authentication with X-Admin-Key header works correctly. Returns 200 with sales data."
+
+  - task: "Admin password change - validation"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Password change validation works correctly: rejects wrong current password (401), rejects short passwords < 6 chars (400)."
+
+  - task: "Admin password change - full flow"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Full password change flow works correctly: changed from RAPANUI-2026 to NUEVA-CLAVE-2026, verified old password fails (401), verified new password works (200), restored original password, verified original works again."
+
+  - task: "Sales analytics - GET /admin/sales"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Returns complete sales analytics with all required fields: total_clp, sales_count, pending_count, granted_count, by_provider (dict), by_product (dict), recent (array)."
+
+  - task: "Legacy endpoint - GET /routes"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Returns array of 11 routes as expected."
+
+  - task: "Legacy endpoint - GET /routes/{route_id}"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Returns route detail for 'circuito-hanga-roa' with id, name, and path."
+
+  - task: "Legacy endpoint - GET /water-points"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Returns array of 7 water points as expected."
+
+frontend:
+  - task: "Frontend testing"
+    implemented: false
+    working: "NA"
+    file: "N/A"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "testing"
+        comment: "Frontend testing not performed as per testing agent instructions (backend only)."
+
+metadata:
+  created_by: "testing_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+  last_updated: "2026-07-24T05:30:00Z"
+
+test_plan:
+  current_focus:
+    - "Song CRUD - POST /admin/content/song"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "testing"
+    message: "Completed comprehensive backend testing of all 14 test scenarios. 31 out of 33 tests PASSED. Found 1 CRITICAL bug (song endpoint route ordering) and 1 expected limitation (Flow email validation). See detailed results in status_history for each task."
