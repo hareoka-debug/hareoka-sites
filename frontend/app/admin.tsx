@@ -173,10 +173,9 @@ export default function AdminPanel() {
       {tab === "ventas" && <VentasTab adminKey={key} bottomInset={insets.bottom} />}
       {tab === "acceso" && <AccesoTab adminKey={key} bottomInset={insets.bottom} />}
       {tab === "rutas" && <RutasTab adminKey={key} bottomInset={insets.bottom} />}
-      {(tab === "agencies" || tab === "restaurants" || tab === "rentcars" || tab === "emergencies") && (
-        <ContentTab adminKey={key} collection={tab} bottomInset={insets.bottom} />
+      {(tab === "agencies" || tab === "restaurants" || tab === "rentcars" || tab === "emergencies" || tab === "cancion") && (
+        <ContentTab adminKey={key} collection={tab === "cancion" ? "songs" : tab} bottomInset={insets.bottom} />
       )}
-      {tab === "cancion" && <CancionTab adminKey={key} bottomInset={insets.bottom} />}
       {tab === "seguridad" && <SeguridadTab adminKey={key} bottomInset={insets.bottom} onKeyChanged={setKey} />}
     </View>
   );
@@ -382,6 +381,7 @@ function ContentTab({ adminKey, collection, bottomInset }: { adminKey: string; c
 
   const save = async () => {
     if (!editing?.name) return;
+    if (collection === "songs" && !editing.spotify_url) return;
     try {
       if (editing.id) await adminUpdateContent(adminKey, collection, editing.id, editing);
       else await adminCreateContent(adminKey, collection, editing);
@@ -395,7 +395,27 @@ function ContentTab({ adminKey, collection, bottomInset }: { adminKey: string; c
     ]);
   };
 
+  const isSongs = collection === "songs";
+
   if (editing) {
+    if (isSongs) {
+      return (
+        <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: bottomInset + spacing.xxl, gap: spacing.sm }}>
+          <Text style={styles.cardTitle}>{editing.id ? "Editar canción" : "Agregar canción"}</Text>
+          <Text style={styles.cardSub}>Configura una canción, episodio o playlist de Spotify que los clientes con acceso podrán escuchar.</Text>
+          <Text style={styles.fieldLabel}>Título *</Text>
+          <TextInput style={styles.input} placeholder="Título de la canción o episodio" value={editing.name || ""} onChangeText={(v) => setEditing((e) => ({ ...e!, name: v }))} placeholderTextColor={colors.onSurfaceTertiary} />
+          <Text style={styles.fieldLabel}>Artista o autor</Text>
+          <TextInput style={styles.input} placeholder="Ej: Podcast Rapa Nui" value={editing.artist || ""} onChangeText={(v) => setEditing((e) => ({ ...e!, artist: v }))} placeholderTextColor={colors.onSurfaceTertiary} />
+          <Text style={styles.fieldLabel}>URL de Spotify *</Text>
+          <TextInput style={styles.input} placeholder="https://open.spotify.com/track/…" value={editing.spotify_url || ""} onChangeText={(v) => setEditing((e) => ({ ...e!, spotify_url: v }))} placeholderTextColor={colors.onSurfaceTertiary} autoCapitalize="none" />
+          <Text style={styles.fieldLabel}>Descripción</Text>
+          <TextInput style={[styles.input, { minHeight: 60 }]} placeholder="Descripción para el cliente" multiline value={editing.description || ""} onChangeText={(v) => setEditing((e) => ({ ...e!, description: v }))} placeholderTextColor={colors.onSurfaceTertiary} />
+          <Pressable style={styles.grantBtn} onPress={save}><Text style={styles.grantBtnText}>{editing.id ? "Guardar cambios" : "Agregar canción"}</Text></Pressable>
+          <Pressable onPress={() => setEditing(null)} style={{ alignSelf: "center", marginTop: spacing.md }}><Text style={styles.backLink}>Cancelar</Text></Pressable>
+        </ScrollView>
+      );
+    }
     return (
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: bottomInset + spacing.xxl, gap: spacing.sm }}>
         <Text style={styles.cardTitle}>{editing.id ? "Editar" : "Agregar nuevo"}</Text>
@@ -417,52 +437,25 @@ function ContentTab({ adminKey, collection, bottomInset }: { adminKey: string; c
     <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: bottomInset + spacing.xxl, gap: spacing.sm }}>
       <Pressable style={styles.addBtn} onPress={() => setEditing({ name: "" })}>
         <Feather name="plus" size={16} color="#FFF" />
-        <Text style={styles.addBtnText}>Agregar nuevo</Text>
+        <Text style={styles.addBtnText}>{isSongs ? "Agregar canción" : "Agregar nuevo"}</Text>
       </Pressable>
+      {items.length === 0 && (
+        <Text style={styles.empty}>Aún no hay {isSongs ? "canciones" : "elementos"} registrados.</Text>
+      )}
       {items.map((it) => (
         <View key={it.id} style={styles.itemRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.itemName}>{it.name}</Text>
-            {it.phone && <Text style={styles.itemMeta}>📞 {it.phone}</Text>}
-            {it.address && <Text style={styles.itemMeta}>📍 {it.address}</Text>}
-            {it.category && <Text style={styles.itemMeta}>🔖 {it.category}</Text>}
+            {isSongs && it.artist && <Text style={styles.itemMeta}>🎤 {it.artist}</Text>}
+            {isSongs && it.spotify_url && <Text style={styles.itemMeta} numberOfLines={1}>🎧 {it.spotify_url}</Text>}
+            {!isSongs && it.phone && <Text style={styles.itemMeta}>📞 {it.phone}</Text>}
+            {!isSongs && it.address && <Text style={styles.itemMeta}>📍 {it.address}</Text>}
+            {!isSongs && it.category && <Text style={styles.itemMeta}>🔖 {it.category}</Text>}
           </View>
           <Pressable onPress={() => setEditing(it)} hitSlop={10}><Feather name="edit-2" size={16} color={colors.brand} /></Pressable>
           <Pressable onPress={() => remove(it.id)} hitSlop={10}><Feather name="trash-2" size={16} color={colors.error} /></Pressable>
         </View>
       ))}
-    </ScrollView>
-  );
-}
-
-// ---------- Canción ----------
-function CancionTab({ adminKey, bottomInset }: { adminKey: string; bottomInset: number }) {
-  const [song, setSong] = useState<Partial<Song>>({});
-  const [msg, setMsg] = useState<string | null>(null);
-  useEffect(() => { adminGetSong(adminKey).then(setSong).catch(() => {}); }, [adminKey]);
-  const save = async () => {
-    try {
-      if (!song.title || !song.spotify_url) { setMsg("Título y URL son obligatorios"); return; }
-      await adminSaveSong(adminKey, song);
-      setMsg("✓ Canción guardada");
-    } catch (e: any) { setMsg(e?.message || "Error"); }
-  };
-  return (
-    <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: bottomInset + spacing.xxl, gap: spacing.sm }}>
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Canción Rapa Nui</Text>
-        <Text style={styles.cardSub}>Configura la canción tradicional que verán los clientes.</Text>
-        <Text style={styles.fieldLabel}>Título *</Text>
-        <TextInput style={styles.input} value={song.title || ""} onChangeText={(v) => setSong({ ...song, title: v })} placeholderTextColor={colors.onSurfaceTertiary} />
-        <Text style={styles.fieldLabel}>Artista</Text>
-        <TextInput style={styles.input} value={song.artist || ""} onChangeText={(v) => setSong({ ...song, artist: v })} placeholderTextColor={colors.onSurfaceTertiary} />
-        <Text style={styles.fieldLabel}>URL de Spotify *</Text>
-        <TextInput style={styles.input} value={song.spotify_url || ""} onChangeText={(v) => setSong({ ...song, spotify_url: v })} placeholderTextColor={colors.onSurfaceTertiary} autoCapitalize="none" />
-        <Text style={styles.fieldLabel}>Descripción</Text>
-        <TextInput style={[styles.input, { minHeight: 60 }]} multiline value={song.description || ""} onChangeText={(v) => setSong({ ...song, description: v })} placeholderTextColor={colors.onSurfaceTertiary} />
-        {msg && <Text style={styles.msg}>{msg}</Text>}
-        <Pressable style={styles.grantBtn} onPress={save}><Text style={styles.grantBtnText}>Guardar canción</Text></Pressable>
-      </View>
     </ScrollView>
   );
 }

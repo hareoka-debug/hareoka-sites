@@ -170,10 +170,21 @@ SEED_EMERGENCIES = [
      "category": "Salud", "description": "Servicio de urgencia médica."},
 ]
 
+# Canciones/podcasts en Spotify. El "name" es el título mostrado.
+SEED_SONGS = [
+    {
+        "name": "Descubre Rapa Nui — Episodio Exclusivo",
+        "artist": "Podcast Rapa Nui",
+        "spotify_url": "https://open.spotify.com/episode/0kWE5WDp7AmXtVSFQDLOG1?si=ce314c83399642cb",
+        "description": "Escucha y descubre la emoción que expresa el pasado. Episodio exclusivo disponible en Spotify.",
+    },
+]
+
+# Retro-compat con el modelo anterior (una sola canción).
 SEED_SONG = {
     "id": "main",
-    "title": "Descubre Rapa Nui — Episodio Exclusivo",
-    "artist": "Podcast Rapa Nui",
-    "spotify_url": "https://open.spotify.com/episode/0kWE5WDp7AmXtVSFQDLOG1?si=ce314c83399642cb",
-    "description": "Escucha y descubre la emoción que expresa el pasado. Episodio exclusivo disponible en Spotify.",
+    "title": SEED_SONGS[0]["name"],
+    "artist": SEED_SONGS[0]["artist"],
+    "spotify_url": SEED_SONGS[0]["spotify_url"],
+    "description": SEED_SONGS[0]["description"],
 }

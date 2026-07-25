@@ -71,6 +71,8 @@ export interface ContentItem {
   description?: string;
   category?: string;
   cuisine?: string;
+  artist?: string;
+  spotify_url?: string;
 }
 
 export interface Song {
@@ -125,6 +127,7 @@ export const fetchProducts = () => get<{ products: Product[] }>("/products").the
 export const fetchProduct = (id: string) => get<Product>(`/products/${id}`);
 export const fetchContent = (name: string) => get<{ items: ContentItem[] }>(`/content/${name}`).then((r) => r.items);
 export const fetchSong = () => get<Song>("/content/song/current");
+export const fetchSongs = () => get<{ items: ContentItem[] }>("/content/songs").then((r) => r.items);
 
 export async function checkUnlocked(deviceId: string): Promise<string[]> {
   const data = await get<{ unlocked: string[] }>(`/payments/access/${deviceId}`);

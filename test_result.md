@@ -102,7 +102,7 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Admin authentication master key recovery bug fix verification for 'Descubre Rapa Nui'. Testing that the master key RAPANUI-2026 ALWAYS works as a recovery key, even after the owner changes their password to a custom key and forgets it."
+user_problem_statement: "Song CRUD functionality fix verification for 'Descubre Rapa Nui'. Testing that the 'Canción' admin tab now supports full CRUD operations for multiple songs (create, read, update, delete), similar to agencies/restaurants, instead of only editing ONE song."
 
 backend:
   - task: "GET /products endpoint"
@@ -302,15 +302,78 @@ backend:
 
   - task: "Song CRUD - POST /admin/content/song"
     implemented: true
-    working: false
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: false
         agent: "testing"
         comment: "CRITICAL BUG: Route ordering issue. The endpoint returns 422 error expecting 'name' field instead of 'title'. FastAPI is matching '/admin/content/song' to the generic '/admin/content/{name}' route (line 684) instead of the specific song route (line 733). The generic route uses ContentItem model (requires 'name') while the song route should use SongIn model (requires 'title'). FIX: Move the specific route @api_router.post('/admin/content/song') BEFORE the generic route @api_router.post('/admin/content/{name}') in server.py. FastAPI matches routes in order, so more specific routes must come first."
+      - working: true
+        agent: "testing"
+        comment: "✅ SONG CRUD FIX VERIFIED (21/21 tests passed). The 'Canción' tab now supports full CRUD for multiple songs using the generic content routes. Backend changes: (1) Added 'songs' → 'content_songs' to CONTENT_COLLECTIONS (line 98), (2) Extended ContentItem model with artist and spotify_url fields (lines 731-732), (3) New public endpoint GET /content/songs returns list of all songs (lines 130-134), (4) Retro-compat endpoint GET /content/song/current queries content_songs and returns first song (lines 111-127), (5) Generic CRUD routes work for songs collection: GET/POST/PUT/DELETE /admin/content/songs. TESTED: (1) Public list songs - returns seed song with all fields ✅, (2) Retro-compat current song - returns first song from catalog ✅, (3) Admin list with auth - works with X-Admin-Key, fails without ✅, (4) Admin create - successfully creates 'Ka Pua' song with id ✅, (5) Admin edit - successfully updates to 'Ka Pua (edit)' ✅, (6) Public list shows edited song - 2 songs visible ✅, (7) Admin delete - successfully deletes, back to 1 song ✅, (8) Regression - all other collections work (agencies:5, restaurants:3, rentcars:2, emergencies:6) ✅, (9) Regression - main endpoints work (products:7, providers:all enabled, checkout:mercadopago works) ✅, (10) Product access - grant/restore/revoke song access works ✅. Database cleaned, admin key verified as RAPANUI-2026. NO REGRESSIONS."
+
+  - task: "GET /content/songs endpoint"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: Public endpoint GET /content/songs (lines 130-134) returns 200 with {items: [...]} structure. Seed song 'Descubre Rapa Nui — Episodio Exclusivo' by 'Podcast Rapa Nui' with spotify episode URL is present. All songs have required fields: name, artist, spotify_url, description. Tested as part of song CRUD verification."
+
+  - task: "Song CRUD - Admin list songs"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: GET /admin/content/songs with X-Admin-Key header returns 200 with {items: [...]}. Without header returns 401 (correct auth enforcement). Uses generic admin content route (lines 735-742)."
+
+  - task: "Song CRUD - Admin create song"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: POST /admin/content/songs with X-Admin-Key and body {name, artist, spotify_url, description} returns 200 with generated id. Created test song 'Ka Pua' by 'Matato'a' successfully. Uses generic admin content route (lines 745-753)."
+
+  - task: "Song CRUD - Admin edit song"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: PUT /admin/content/songs/{id} with X-Admin-Key and updated body returns 200 with changes reflected. Successfully edited 'Ka Pua' to 'Ka Pua (edit)' with new spotify_url and description. Uses generic admin content route (lines 756-765)."
+
+  - task: "Song CRUD - Admin delete song"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: DELETE /admin/content/songs/{id} with X-Admin-Key returns 200 with {deleted: true}. Successfully deleted test song. Public list confirmed back to 1 song (seed only). Uses generic admin content route (lines 768-777)."
 
   - task: "Admin authentication - GET /admin/sales"
     implemented: true
@@ -645,14 +708,14 @@ frontend:
 
 metadata:
   created_by: "testing_agent"
-  version: "1.2"
-  test_sequence: 4
+  version: "1.3"
+  test_sequence: 5
   run_ui: false
-  last_updated: "2026-07-25T02:30:00Z"
+  last_updated: "2026-07-25T03:45:00Z"
 
 test_plan:
   current_focus:
-    - "Admin master key recovery mechanism"
+    - "Song CRUD - Full CRUD operations for multiple songs"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -680,3 +743,7 @@ agent_communication:
     message: "Applied critical bug fix for admin panel lockout issue. Owner reported being unable to enter /admin panel after changing password in Seguridad tab and forgetting it. Fix applied in _check_admin function (lines 518-537): DEFAULT_ADMIN_KEY (RAPANUI-2026) from env now ALWAYS works as master recovery key, in addition to any custom key saved in admin_settings.admin_key. Both keys work simultaneously. This allows owner to regain access using RAPANUI-2026 even if they forgot their custom password. Requesting testing agent to verify 6 test scenarios: (1) Initial state with default key, (2) Password change to custom key, (3) CRITICAL - master key still works after custom password set, (4) Other admin routes accept both keys, (5) Password change validation still requires correct current password, (6) Restore to default state."
   - agent: "testing"
     message: "✅ ADMIN MASTER KEY RECOVERY BUG FIX VERIFIED - ALL 16/16 TESTS PASSED. CRITICAL FIX CONFIRMED: The master key RAPANUI-2026 ALWAYS works as a recovery mechanism, even after owner changes to custom password. TEST RESULTS: (1) Initial state - master key works (200), wrong keys fail (401), no header fails (401) ✅ 3/3, (2) Password change - successfully changed to MI-CLAVE-CUSTOM-999, verified in DB ✅ 2/2, (3) CRITICAL RECOVERY - both custom key AND master key work simultaneously on GET /admin/sales, wrong keys still fail ✅ 3/3, (4) Other admin routes - POST /admin/manual-access with master key works, POST /admin/manual-access/revoke with custom key works, GET /admin/routes with master key returns 11 routes ✅ 3/3, (5) Password change validation - accepts correct current key, rejects wrong current key (401) ✅ 2/2, (6) Restore state - successfully restored to RAPANUI-2026, verified in DB ✅ 3/3. IMPLEMENTATION: _check_admin function collects all valid keys in a set (DEFAULT_ADMIN_KEY + custom key from DB), accepts request if provided key matches ANY valid key. NO REGRESSIONS. Database restored to default state. CONCLUSION: Owner can now ALWAYS use RAPANUI-2026 to regain admin access, solving the reported lockout issue."
+  - agent: "main"
+    message: "Applied Song CRUD fix for 'Canción' admin tab. Owner reported that the tab only allowed editing ONE song, without ability to add multiple or delete. Fix applied: (1) Backend - added 'songs' → 'content_songs' to CONTENT_COLLECTIONS (line 98), extended ContentItem model with artist and spotify_url fields (lines 731-732), new public endpoint GET /content/songs (lines 130-134), retro-compat GET /content/song/current now queries content_songs (lines 111-127), seed data SEED_SONGS with initial song. (2) Frontend admin - 'Canción' tab now uses generic ContentTab component like agencies/restaurants, showing fields: Título, Artista, URL Spotify, Descripción. (3) Frontend public /song - redesigned to list ALL songs with Spotify button per song. Requesting testing agent to verify 10 test scenarios: (1) Public list songs, (2) Retro-compat current song, (3) Admin list with auth, (4) Admin create new song, (5) Admin edit song, (6) Verify in public list, (7) Admin delete song, (8) Regression - other collections, (9) Regression - main endpoints, (10) Product access verification."
+  - agent: "testing"
+    message: "✅ SONG CRUD FIX VERIFIED - ALL 21/21 TESTS PASSED. The 'Canción' admin tab now supports full CRUD for multiple songs. IMPLEMENTATION VERIFIED: Backend uses generic content routes with 'songs' collection mapped to 'content_songs' MongoDB collection. ContentItem model includes artist and spotify_url fields. TEST RESULTS: (1) Public GET /content/songs - returns seed song 'Descubre Rapa Nui — Episodio Exclusivo' with all fields ✅, (2) Retro-compat GET /content/song/current - returns first song from catalog with id, title, artist, spotify_url, description ✅, (3) Admin list - GET /admin/content/songs with X-Admin-Key works (200), without header fails (401) ✅, (4) Admin create - POST /admin/content/songs creates 'Ka Pua' song with generated id ✅, (5) Admin edit - PUT /admin/content/songs/{id} updates to 'Ka Pua (edit)' ✅, (6) Public list - shows 2 songs including edited one ✅, (7) Admin delete - DELETE /admin/content/songs/{id} removes song, back to 1 song ✅, (8) Regression - all collections work: agencies (5), restaurants (3), rentcars (2), emergencies (6) ✅, (9) Regression - main endpoints work: products (7), providers (all enabled), checkout with mercadopago for song product ✅, (10) Product access - grant/restore/revoke song access works ✅. Database cleaned, admin key verified as RAPANUI-2026. NO REGRESSIONS. CONCLUSION: Owner can now create, edit, and delete multiple songs in the Canción tab, solving the reported limitation."

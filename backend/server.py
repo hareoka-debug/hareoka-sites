@@ -28,6 +28,7 @@ from content_data import (
     SEED_RENTCARS,
     SEED_EMERGENCIES,
     SEED_SONG,
+    SEED_SONGS,
 )
 
 
@@ -94,6 +95,7 @@ CONTENT_COLLECTIONS = {
     "restaurants": "content_restaurants",
     "rentcars": "content_rentcars",
     "emergencies": "content_emergencies",
+    "songs": "content_songs",
 }
 
 
@@ -108,11 +110,28 @@ async def list_content(name: str):
 
 @api_router.get("/content/song/current")
 async def get_song():
-    doc = await db.content_song.find_one({"id": "main"}, {"_id": 0})
+    # Retro-compat: devuelve la primera canción del catálogo.
+    doc = await db.content_songs.find_one({}, {"_id": 0}, sort=[("name", 1)])
     if not doc:
-        doc = {**SEED_SONG}
-        await db.content_song.insert_one({**doc})
-    return doc
+        # fallback al doc antiguo o al seed
+        legacy = await db.content_song.find_one({"id": "main"}, {"_id": 0})
+        if legacy:
+            return legacy
+        return {**SEED_SONG}
+    return {
+        "id": doc.get("id", "main"),
+        "title": doc.get("name") or doc.get("title", ""),
+        "artist": doc.get("artist", ""),
+        "spotify_url": doc.get("spotify_url", ""),
+        "description": doc.get("description", ""),
+    }
+
+
+@api_router.get("/content/songs")
+async def list_songs():
+    """Lista pública de todas las canciones del catálogo."""
+    items = await db.content_songs.find({}, {"_id": 0}).sort("name", 1).to_list(500)
+    return {"items": items}
 
 
 # ---------------- Pagos multi-producto (Stripe + Mercado Pago + Flow) ----------------
@@ -709,6 +728,8 @@ class ContentItem(BaseModel):
     description: str | None = None
     category: str | None = None
     cuisine: str | None = None
+    artist: str | None = None
+    spotify_url: str | None = None
 
 
 @api_router.get("/admin/content/{name}")
@@ -865,6 +886,8 @@ async def seed_all():
     await _seed_collection("content_restaurants", SEED_RESTAURANTS)
     await _seed_collection("content_rentcars", SEED_RENTCARS)
     await _seed_collection("content_emergencies", SEED_EMERGENCIES)
+    await _seed_collection("content_songs", SEED_SONGS)
+    # Retro-compat con la app anterior que usaba una sola canción.
     if await db.content_song.count_documents({}) == 0:
         await db.content_song.insert_one({**SEED_SONG})
 
