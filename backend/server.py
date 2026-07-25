@@ -269,7 +269,10 @@ async def create_payment_checkout(body: CheckoutRequest, request: Request):
             "amount": amount,
             "email": email,
             "urlConfirmation": f"{host_url}/api/webhook/flow",
-            "urlReturn": f"{host_url}/api/payments/flow/return",
+            # urlReturn debe apuntar al FRONTEND, no al backend.
+            # Flow redirige al usuario aquí tras completar el pago; algunos hostings
+            # bloquean POSTs externos a /api/*, y el detour vía backend causaba 403.
+            "urlReturn": f"{origin}/payment-success?tx={tx_id}",
         }
         try:
             result = await _flow_call("payment/create", params)

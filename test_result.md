@@ -167,15 +167,18 @@ backend:
 
   - task: "POST /payments/checkout - Flow"
     implemented: true
-    working: false
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
-    priority: "medium"
+    priority: "high"
     needs_retesting: false
     status_history:
       - working: false
         agent: "testing"
         comment: "Flow API rejects test emails with 400 error: 'El email ingresado no es válido para Flow. Usa un correo real.' This is expected behavior from Flow's production API which validates emails strictly. Tested with both 'test@example.com' and 'juan.perez@gmail.com'. Flow requires real, registered email addresses. This is NOT a bug in our code, but a limitation of testing with Flow's production API."
+      - working: true
+        agent: "testing"
+        comment: "✅ CRITICAL BUG FIX VERIFIED: Flow 403 Forbidden issue resolved. Root cause was urlReturn pointing to backend /api/payments/flow/return which gets blocked by ingress security (external POSTs to /api/* blocked). Fix applied at line 275: urlReturn now points to frontend {origin}/payment-success?tx={tx_id}. Verified: (1) Flow checkout returns 200 with valid flow.cl URL, (2) Code shows correct urlReturn to frontend, (3) Database shows correct origin_url, (4) Webhook still works, (5) Legacy endpoint preserved for compatibility. Tested with realistic email cliente.real@gmail.com - successfully created checkout. This matches the pattern used by Mercado Pago and Stripe."
 
   - task: "POST /payments/checkout - emergencies product validation"
     implemented: true
@@ -648,3 +651,7 @@ agent_communication:
     message: "Applied mobile bottom sheet fixes for iPhone Safari viewport issue. Changes: (1) BuyModal.tsx - uses 100dvh for backdrop and 92dvh for sheetWrap to respect iOS Safari dynamic URL bar, ScrollView has flex:1 + paddingBottom:60 for proper scrolling. (2) RestoreModal.tsx - uses 100dvh/80dvh same approach. (3) +html.tsx - added lang='es', translate='no', meta google notranslate to prevent Chrome/Safari from translating 'Flow' to 'Fluir'. Requesting testing agent to verify on iPhone SE (390×667), iPhone Pro (390×844), landscape (844×390), and translation prevention."
   - agent: "testing"
     message: "✅ MOBILE BOTTOM SHEET FIX VERIFIED - 5 OF 6 TESTS PASSED. PASSED: (1) iPhone SE 390×667 - Pay button at y=673.4 (within 700px viewport), all elements visible including price badge, title, payment methods, email input, Pay button, and 'Volver · Back' link. (2) iPhone Pro 390×844 - Pay button at y=687.5 (within 844px viewport), fully visible. (3) Landscape 844×390 - Modal is scrollable, Pay button reachable with scroll. (4) Restore modal 390×667 - All elements visible (title, description, email input, verify button, back link). (5) Payment flow - Successfully redirects to Mercado Pago. PARTIAL PASS: (6) Translation prevention - 'Flow' text displays correctly as 'Flow' (not 'Fluir'), BUT HTML attributes not applied: rendered HTML has lang='en' (not 'es'), no translate='no', no meta google notranslate. The +html.tsx file has correct attributes but they're not in the rendered HTML - likely needs rebuild/export to take effect. CONCLUSION: Bottom sheet cut-off issue is FIXED. Translation attributes need rebuild."
+  - agent: "main"
+    message: "Applied critical bug fix for Flow payment 403 Forbidden issue. Root cause: urlReturn was pointing to backend /api/payments/flow/return, which gets blocked by ingress security rules that prevent external POSTs to /api/* routes. Fix: Changed urlReturn to point directly to frontend /payment-success?tx={tx_id} (line 275 in server.py). urlConfirmation still points to backend webhook /api/webhook/flow (server-to-server, not affected). This matches how Mercado Pago and Stripe work. Legacy endpoint /payments/flow/return kept for compatibility. Requesting testing agent to verify: (1) Flow checkout creates valid payment URL, (2) urlReturn points to frontend, (3) webhook still works, (4) no regression in other providers, (5) legacy endpoint exists, (6) existing customer antuaji@gmail.com can restore, (7) pending customer hernanluiis@gmail.com status."
+  - agent: "testing"
+    message: "✅ FLOW 403 BUG FIX VERIFIED - 12/13 TESTS PASSED. CRITICAL FIX CONFIRMED: (1) Flow checkout creation works - returns 200 with valid flow.cl URL for song product, (2) Code review confirms urlReturn at line 275 points to frontend: {origin}/payment-success?tx={tx_id} (NOT backend /api/payments/flow/return), (3) Database verification shows correct origin_url: https://rapa-nui-routes-1.preview.emergentagent.com, (4) Flow webhook responds 200 with received:true, (5) All regression tests pass: GET /products (7 products), GET /payments/providers (all enabled), POST /payments/checkout with mercadopago (works), POST /payments/checkout with stripe (works), GET /admin/sales (works), (6) Legacy endpoint /payments/flow/return exists and returns 303 redirect, (7) Existing customer antuaji@gmail.com can restore access (unlocked: emergencies, song), (8) Pending customer hernanluiis@gmail.com has 1 transaction: Status=pending, Product=song, Amount=3000 CLP, Provider=flow, Created=2026-07-25T00:41:30. CONCLUSION: The 403 Forbidden bug is FIXED. Flow now redirects users to frontend URL which is not blocked by ingress. The fix matches the pattern used by Mercado Pago and Stripe."
