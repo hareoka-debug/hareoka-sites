@@ -102,7 +102,13 @@ export default function BuyModal({ product, visible, onClose }: Props) {
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <View style={styles.sheet}>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.scroll}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              bounces={false}
+            >
               <View style={styles.imgWrap}>
                 <Image source={{ uri: product.image }} style={styles.img} />
                 <LinearGradient colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.55)"]} style={StyleSheet.absoluteFill} />
@@ -126,9 +132,15 @@ export default function BuyModal({ product, visible, onClose }: Props) {
                         key={m.key}
                         style={[styles.methodCard, active && styles.methodCardActive]}
                         onPress={() => setMethod(m.key)}
+                        {...(Platform.OS === "web" ? { dataSet: { notranslate: "true" } } : {})}
                       >
                         <Feather name={m.icon} size={18} color={active ? colors.brand : colors.onSurfaceSecondary} />
-                        <Text style={[styles.methodName, active && { color: colors.brand }]}>{m.label}</Text>
+                        <Text
+                          style={[styles.methodName, active && { color: colors.brand }]}
+                          {...(Platform.OS === "web" ? { dataSet: { notranslate: "true" } } : {})}
+                        >
+                          {m.label}
+                        </Text>
                         <Text style={styles.methodSub}>{m.sub}</Text>
                       </Pressable>
                     );
@@ -147,7 +159,7 @@ export default function BuyModal({ product, visible, onClose }: Props) {
                 />
                 {error && <Text style={styles.error}>{error}</Text>}
 
-                <Pressable style={styles.cta} onPress={handlePay} disabled={loading}>
+                <Pressable style={styles.cta} onPress={handlePay} disabled={loading} testID="btn-pay">
                   {loading ? <ActivityIndicator color="#FFF" /> : (
                     <Text style={styles.ctaText}>Pagar · Pay {clpLong(product.amount_clp)}</Text>
                   )}
@@ -168,10 +180,27 @@ export default function BuyModal({ product, visible, onClose }: Props) {
   );
 }
 
+// En Web usamos dvh (dynamic viewport height) para respetar la barra de URL de iOS Safari,
+// que hace que "100%" no llegue realmente al fondo visible. En native usamos porcentaje.
+const WEB_MAX_HEIGHT: any = Platform.OS === "web" ? { maxHeight: "92dvh" as any, height: "92dvh" as any } : { maxHeight: "92%" as any };
+
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
-  sheetWrap: { maxHeight: "92%" },
-  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" },
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+    ...(Platform.OS === "web" ? ({ height: "100dvh" as any } as any) : {}),
+  },
+  sheetWrap: { ...WEB_MAX_HEIGHT, width: "100%" },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: "hidden",
+    flex: 1,
+  },
+  scroll: { flex: 1 },
+  scrollContent: { paddingBottom: spacing.xxl + 24, flexGrow: 1 },
   imgWrap: { height: 180 },
   img: { width: "100%", height: "100%" },
   grabber: {

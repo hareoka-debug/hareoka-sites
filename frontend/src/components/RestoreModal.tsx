@@ -102,9 +102,17 @@ export default function RestoreModal({ visible, onClose, onRestored }: Props) {
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
-  sheetWrap: { maxHeight: "70%" },
-  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.xl, paddingTop: spacing.lg, gap: spacing.sm },
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+    ...(Platform.OS === "web" ? ({ height: "100dvh" as any } as any) : {}),
+  },
+  sheetWrap: {
+    ...(Platform.OS === "web" ? ({ maxHeight: "80dvh" as any } as any) : { maxHeight: "80%" as any }),
+    width: "100%",
+  },
+  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.sm },
   grabber: { alignSelf: "center", width: 44, height: 22, borderRadius: 12, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", marginBottom: spacing.sm },
   title: { fontFamily: serif, fontSize: 22, color: colors.onSurface },
   titleEn: { fontStyle: "italic", color: colors.onSurfaceSecondary, fontSize: 20 },
