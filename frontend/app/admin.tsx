@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -14,6 +15,23 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+/**
+ * Diálogo de confirmación cross-platform.
+ * En web `Alert.alert` de React Native no dispara los onPress → usamos window.confirm.
+ * En native usa Alert.alert normal.
+ */
+function confirmAction(title: string, message: string, confirmLabel: string, onConfirm: () => void) {
+  if (Platform.OS === "web") {
+    const ok = typeof window !== "undefined" && window.confirm(`${title}\n\n${message}`);
+    if (ok) onConfirm();
+    return;
+  }
+  Alert.alert(title, message, [
+    { text: "Cancelar", style: "cancel" },
+    { text: confirmLabel, style: "destructive", onPress: onConfirm },
+  ]);
+}
 
 import { storage } from "@/src/utils/storage";
 import {
@@ -301,12 +319,23 @@ function VentasTab({ adminKey, bottomInset }: { adminKey: string; bottomInset: n
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const resetAll = () => {
-    Alert.alert("¿Borrar todas las ventas?", "Esto elimina el historial de pagos y accesos de webhook, pero mantiene tus accesos manuales.", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Sí, borrar", style: "destructive", onPress: async () => {
-        try { await adminResetSales(adminKey); await load(); } catch {}
-      }},
-    ]);
+    confirmAction(
+      "¿Borrar todas las ventas?",
+      "Esto elimina el historial de pagos y accesos de webhook, pero mantiene tus accesos manuales. Acción irreversible.",
+      "Sí, borrar",
+      async () => {
+        try {
+          await adminResetSales(adminKey);
+          await load();
+        } catch (e) {
+          if (Platform.OS === "web" && typeof window !== "undefined") {
+            window.alert("Error al borrar. Revisa tu conexión y reintenta.");
+          } else {
+            Alert.alert("Error", "No se pudo borrar. Reintenta.");
+          }
+        }
+      },
+    );
   };
 
   return (
@@ -402,12 +431,21 @@ function AccesoTab({ adminKey, bottomInset }: { adminKey: string; bottomInset: n
 
   const revoke = async () => {
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) { setMsg({ ok: false, text: "Email inválido" }); return; }
-    Alert.alert("¿Revocar accesos?", `Se revocarán TODOS los accesos manuales de ${email.trim()}`, [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Sí, revocar", style: "destructive", onPress: async () => {
-        try { await adminRevokeManual(adminKey, email.trim()); setMsg({ ok: true, text: "✓ Accesos revocados" }); setEmail(""); await load(); } catch {}
-      }},
-    ]);
+    confirmAction(
+      "¿Revocar accesos?",
+      `Se revocarán TODOS los accesos manuales de ${email.trim()}`,
+      "Sí, revocar",
+      async () => {
+        try {
+          await adminRevokeManual(adminKey, email.trim());
+          setMsg({ ok: true, text: "✓ Accesos revocados" });
+          setEmail("");
+          await load();
+        } catch (e: any) {
+          setMsg({ ok: false, text: e?.message || "Error al revocar" });
+        }
+      },
+    );
   };
 
   return (
@@ -492,10 +530,21 @@ function ContentTab({ adminKey, collection, bottomInset }: { adminKey: string; c
     } catch {}
   };
   const remove = (id: string) => {
-    Alert.alert("¿Eliminar?", "", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Eliminar", style: "destructive", onPress: async () => { await adminDeleteContent(adminKey, collection, id); load(); }}
-    ]);
+    confirmAction(
+      "¿Eliminar?",
+      "Este elemento se borrará permanentemente.",
+      "Eliminar",
+      async () => {
+        try {
+          await adminDeleteContent(adminKey, collection, id);
+          load();
+        } catch (e) {
+          if (Platform.OS === "web" && typeof window !== "undefined") {
+            window.alert("No se pudo eliminar. Reintenta.");
+          }
+        }
+      },
+    );
   };
 
   const isSongs = collection === "songs";
