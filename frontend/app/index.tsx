@@ -147,7 +147,15 @@ export default function Home() {
           <View style={styles.footer}>
             <Text style={styles.footNote}>Pago único por dispositivo · Pago seguro · Sin suscripciones</Text>
             <Text style={styles.footNoteEn}>One-time payment per device · Secure payment · No subscriptions</Text>
-            <Text style={styles.copy}>© Todos los derechos reservados · All rights reserved</Text>
+            <Pressable
+              onPress={openAdmin}
+              hitSlop={16}
+              testID="admin-entry"
+              accessibilityLabel="Panel de administrador"
+              style={styles.copyPressable}
+            >
+              <Text style={styles.copy}>© Todos los derechos reservados · All rights reserved</Text>
+            </Pressable>
           </View>
         </View>
       </ScrollView>
@@ -183,5 +191,6 @@ const styles = StyleSheet.create({
   footer: { alignItems: "center", marginTop: spacing.xl, gap: 4 },
   footNote: { color: colors.onSurfaceSecondary, fontSize: 12 },
   footNoteEn: { color: colors.onSurfaceTertiary, fontSize: 11, fontStyle: "italic" },
-  copy: { color: colors.onSurfaceTertiary, fontSize: 11, marginTop: spacing.sm },
+  copyPressable: { marginTop: spacing.sm, paddingVertical: 8, paddingHorizontal: 16 },
+  copy: { color: colors.onSurfaceTertiary, fontSize: 11 },
 });
