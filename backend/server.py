@@ -516,9 +516,24 @@ async def _current_admin_key() -> str:
 
 
 async def _check_admin(request: Request):
+    """Verifica la clave de admin. La clave del env (DEFAULT_ADMIN_KEY) SIEMPRE
+    funciona como clave maestra de recuperación, incluso si el dueño cambió su
+    clave desde Seguridad y la olvidó. Además acepta la clave actualmente
+    guardada en admin_settings.
+    """
     key = request.headers.get("X-Admin-Key") or request.query_params.get("key")
-    current = await _current_admin_key()
-    if not current or key != current:
+    if not key:
+        raise HTTPException(status_code=401, detail="Clave de administrador incorrecta")
+
+    # Recolectar todas las claves válidas
+    valid_keys: set[str] = set()
+    if DEFAULT_ADMIN_KEY:
+        valid_keys.add(DEFAULT_ADMIN_KEY)
+    doc = await db.admin_settings.find_one({"id": "main"})
+    if doc and doc.get("admin_key"):
+        valid_keys.add(doc["admin_key"])
+
+    if not valid_keys or key not in valid_keys:
         raise HTTPException(status_code=401, detail="Clave de administrador incorrecta")
 
 

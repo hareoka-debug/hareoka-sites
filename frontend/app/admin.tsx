@@ -89,10 +89,16 @@ export default function AdminPanel() {
       await storage.setItem(ADMIN_KEY_STORAGE, key.trim());
       setAuthed(true);
     } catch (e: any) {
-      setError(e?.message?.includes("401") || e?.message?.includes("incorrecta") ? "Clave incorrecta." : "Error de conexión.");
+      setError(e?.message?.includes("401") || e?.message?.includes("incorrecta") ? "Clave incorrecta. Prueba con tu clave maestra original (la que Emergent creó al instalar el panel)." : "Error de conexión. Reintenta en unos segundos.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const clearStoredKey = async () => {
+    await storage.removeItem(ADMIN_KEY_STORAGE);
+    setKey("");
+    setError(null);
   };
 
   const handleLogout = async () => {
@@ -129,6 +135,9 @@ export default function AdminPanel() {
               <Feather name="alert-triangle" size={16} color="#FFF" />
             </>
           )}
+        </Pressable>
+        <Pressable onPress={clearStoredKey} hitSlop={12}>
+          <Text style={styles.helpLink}>¿Problemas? Borrar clave guardada e intentar de nuevo</Text>
         </Pressable>
         <Pressable onPress={() => router.replace("/")} hitSlop={12}>
           <Text style={styles.backLink}>Volver a la app</Text>
@@ -504,6 +513,7 @@ const styles = StyleSheet.create({
   hivamanaBtn: { alignSelf: "stretch", flexDirection: "row", gap: 8, backgroundColor: colors.brand, borderRadius: radius.pill, minHeight: 50, alignItems: "center", justifyContent: "center" },
   hivamanaText: { color: "#FFF", fontSize: 17, fontWeight: "800", letterSpacing: 1 },
   backLink: { color: colors.onSurfaceSecondary, fontSize: 13, textDecorationLine: "underline" },
+  helpLink: { color: colors.brand, fontSize: 12, textDecorationLine: "underline", textAlign: "center" },
 
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface },
   headerBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },

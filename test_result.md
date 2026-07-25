@@ -102,7 +102,7 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Frontend purchase flow testing for 'Descubre Rapa Nui' multi-product application. Testing REAL Mercado Pago and Flow checkout flows from preview URL with 6 test scenarios covering product selection, payment provider redirects, email validation, and free product access."
+user_problem_statement: "Admin authentication master key recovery bug fix verification for 'Descubre Rapa Nui'. Testing that the master key RAPANUI-2026 ALWAYS works as a recovery key, even after the owner changes their password to a custom key and forgets it."
 
 backend:
   - task: "GET /products endpoint"
@@ -323,6 +323,21 @@ backend:
       - working: true
         agent: "testing"
         comment: "Admin authentication with X-Admin-Key header works correctly. Returns 200 with sales data."
+      - working: true
+        agent: "testing"
+        comment: "✅ MASTER KEY RECOVERY BUG FIX VERIFIED (16/16 tests passed). The fix in _check_admin function (lines 518-537) now collects ALL valid keys in a set: (1) DEFAULT_ADMIN_KEY from env (RAPANUI-2026) is ALWAYS added, (2) Custom key from admin_settings.admin_key is also added if exists, (3) Request succeeds if provided key matches ANY valid key. TESTED SCENARIOS: (1) Initial state with default key - master key works, wrong keys fail (3/3 pass), (2) Password change to custom key MI-CLAVE-CUSTOM-999 - successfully changed and verified in DB (2/2 pass), (3) CRITICAL RECOVERY TEST - both custom key AND master key work simultaneously after password change (3/3 pass), (4) Other admin routes accept both keys - manual access, revoke, and routes endpoints work with both keys (3/3 pass), (5) Password change validation - requires correct current key, rejects wrong current key (2/2 pass), (6) Restore to default - successfully restored admin_key back to RAPANUI-2026 in DB (3/3 pass). CONCLUSION: The master key RAPANUI-2026 ALWAYS works as a recovery mechanism, even when user has set a custom password. This solves the reported bug where owner was locked out after forgetting their custom password."
+
+  - task: "Admin master key recovery mechanism"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "critical"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ CRITICAL BUG FIX VERIFIED - Master key recovery mechanism working perfectly. The _check_admin function (lines 518-537) implements dual-key authentication: DEFAULT_ADMIN_KEY (RAPANUI-2026) from env ALWAYS works as master recovery key, AND custom key from admin_settings also works if set. This solves the reported issue where owner changed password in Seguridad tab and forgot it, getting locked out. Now owner can ALWAYS use RAPANUI-2026 to regain access. Comprehensive testing: (1) Master key works with default DB state, (2) After changing to custom key MI-CLAVE-CUSTOM-999, BOTH keys work simultaneously, (3) Master key works on all admin endpoints: /admin/sales, /admin/manual-access, /admin/manual-access/revoke, /admin/routes, /admin/change-password, (4) Wrong keys still correctly rejected with 401, (5) Password change flow still requires correct current password for security. Database state correctly restored to RAPANUI-2026 after testing. NO REGRESSIONS."
 
   - task: "Admin password change - validation"
     implemented: true
@@ -335,6 +350,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "Password change validation works correctly: rejects wrong current password (401), rejects short passwords < 6 chars (400)."
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED as part of master key recovery testing. Password change endpoint correctly validates: (1) Requires correct current password - rejects 'clave-incorrecta' with 401, (2) Accepts master key in X-Admin-Key header for authentication, (3) Successfully changes password when current password matches. Tested in scenario 5b where wrong current key was rejected with 401."
 
   - task: "Admin password change - full flow"
     implemented: true
@@ -347,6 +365,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "Full password change flow works correctly: changed from RAPANUI-2026 to NUEVA-CLAVE-2026, verified old password fails (401), verified new password works (200), restored original password, verified original works again."
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED as part of master key recovery testing. Complete password change flow tested across 3 scenarios: (1) Change from default RAPANUI-2026 to custom MI-CLAVE-CUSTOM-999 - success, DB updated correctly, (2) Change from custom MI-CLAVE-CUSTOM-999 to otra-clave-999 - success with correct current key, (3) Restore from otra-clave-999 back to RAPANUI-2026 - success, DB restored. All changes persisted correctly in admin_settings collection."
 
   - task: "Sales analytics - GET /admin/sales"
     implemented: true
@@ -624,14 +645,14 @@ frontend:
 
 metadata:
   created_by: "testing_agent"
-  version: "1.1"
-  test_sequence: 3
-  run_ui: true
-  last_updated: "2026-07-25T00:05:00Z"
+  version: "1.2"
+  test_sequence: 4
+  run_ui: false
+  last_updated: "2026-07-25T02:30:00Z"
 
 test_plan:
   current_focus:
-    - "Translation prevention - HTML attributes"
+    - "Admin master key recovery mechanism"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -655,3 +676,7 @@ agent_communication:
     message: "Applied critical bug fix for Flow payment 403 Forbidden issue. Root cause: urlReturn was pointing to backend /api/payments/flow/return, which gets blocked by ingress security rules that prevent external POSTs to /api/* routes. Fix: Changed urlReturn to point directly to frontend /payment-success?tx={tx_id} (line 275 in server.py). urlConfirmation still points to backend webhook /api/webhook/flow (server-to-server, not affected). This matches how Mercado Pago and Stripe work. Legacy endpoint /payments/flow/return kept for compatibility. Requesting testing agent to verify: (1) Flow checkout creates valid payment URL, (2) urlReturn points to frontend, (3) webhook still works, (4) no regression in other providers, (5) legacy endpoint exists, (6) existing customer antuaji@gmail.com can restore, (7) pending customer hernanluiis@gmail.com status."
   - agent: "testing"
     message: "✅ FLOW 403 BUG FIX VERIFIED - 12/13 TESTS PASSED. CRITICAL FIX CONFIRMED: (1) Flow checkout creation works - returns 200 with valid flow.cl URL for song product, (2) Code review confirms urlReturn at line 275 points to frontend: {origin}/payment-success?tx={tx_id} (NOT backend /api/payments/flow/return), (3) Database verification shows correct origin_url: https://rapa-nui-routes-1.preview.emergentagent.com, (4) Flow webhook responds 200 with received:true, (5) All regression tests pass: GET /products (7 products), GET /payments/providers (all enabled), POST /payments/checkout with mercadopago (works), POST /payments/checkout with stripe (works), GET /admin/sales (works), (6) Legacy endpoint /payments/flow/return exists and returns 303 redirect, (7) Existing customer antuaji@gmail.com can restore access (unlocked: emergencies, song), (8) Pending customer hernanluiis@gmail.com has 1 transaction: Status=pending, Product=song, Amount=3000 CLP, Provider=flow, Created=2026-07-25T00:41:30. CONCLUSION: The 403 Forbidden bug is FIXED. Flow now redirects users to frontend URL which is not blocked by ingress. The fix matches the pattern used by Mercado Pago and Stripe."
+  - agent: "main"
+    message: "Applied critical bug fix for admin panel lockout issue. Owner reported being unable to enter /admin panel after changing password in Seguridad tab and forgetting it. Fix applied in _check_admin function (lines 518-537): DEFAULT_ADMIN_KEY (RAPANUI-2026) from env now ALWAYS works as master recovery key, in addition to any custom key saved in admin_settings.admin_key. Both keys work simultaneously. This allows owner to regain access using RAPANUI-2026 even if they forgot their custom password. Requesting testing agent to verify 6 test scenarios: (1) Initial state with default key, (2) Password change to custom key, (3) CRITICAL - master key still works after custom password set, (4) Other admin routes accept both keys, (5) Password change validation still requires correct current password, (6) Restore to default state."
+  - agent: "testing"
+    message: "✅ ADMIN MASTER KEY RECOVERY BUG FIX VERIFIED - ALL 16/16 TESTS PASSED. CRITICAL FIX CONFIRMED: The master key RAPANUI-2026 ALWAYS works as a recovery mechanism, even after owner changes to custom password. TEST RESULTS: (1) Initial state - master key works (200), wrong keys fail (401), no header fails (401) ✅ 3/3, (2) Password change - successfully changed to MI-CLAVE-CUSTOM-999, verified in DB ✅ 2/2, (3) CRITICAL RECOVERY - both custom key AND master key work simultaneously on GET /admin/sales, wrong keys still fail ✅ 3/3, (4) Other admin routes - POST /admin/manual-access with master key works, POST /admin/manual-access/revoke with custom key works, GET /admin/routes with master key returns 11 routes ✅ 3/3, (5) Password change validation - accepts correct current key, rejects wrong current key (401) ✅ 2/2, (6) Restore state - successfully restored to RAPANUI-2026, verified in DB ✅ 3/3. IMPLEMENTATION: _check_admin function collects all valid keys in a set (DEFAULT_ADMIN_KEY + custom key from DB), accepts request if provided key matches ANY valid key. NO REGRESSIONS. Database restored to default state. CONCLUSION: Owner can now ALWAYS use RAPANUI-2026 to regain admin access, solving the reported lockout issue."
