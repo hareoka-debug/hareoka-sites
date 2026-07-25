@@ -35,10 +35,13 @@ import {
   adminSaveSong,
   adminUpdateContent,
   fetchProducts,
+  getDeviceId,
+  selfDestructAccess,
 } from "@/src/lib/api";
 import { colors, radius, serif, spacing } from "@/src/lib/theme";
 
 const ADMIN_KEY_STORAGE = "rapa-nui-admin-key";
+const ATTEMPTS_STORAGE = "rapa-nui-admin-attempts";
 
 type Tab = "ventas" | "acceso" | "rutas" | "agencies" | "restaurants" | "rentcars" | "emergencies" | "cancion" | "seguridad";
 
@@ -65,9 +68,21 @@ export default function AdminPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("ventas");
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [phase, setPhase] = useState<"idle" | "warning" | "destroyed">("idle");
 
   useEffect(() => {
     (async () => {
+      // Restaurar contador de intentos (persiste entre reloads para no dar segunda oportunidad)
+      try {
+        const raw = await storage.getItem(ATTEMPTS_STORAGE, "");
+        const n = raw ? parseInt(raw as string, 10) : 0;
+        if (!Number.isNaN(n) && n > 0) {
+          setFailedAttempts(n);
+          if (n === 1) setPhase("warning");
+        }
+      } catch {}
+
       const stored = await storage.getItem(ADMIN_KEY_STORAGE, "");
       if (stored) {
         try {
@@ -80,16 +95,68 @@ export default function AdminPanel() {
     })();
   }, []);
 
+  const clearAllLocalStorage = async () => {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        window.localStorage.clear();
+      }
+    } catch {}
+    for (const k of [
+      ADMIN_KEY_STORAGE,
+      ATTEMPTS_STORAGE,
+      "rapa-nui-email",
+      "rapa-nui-device-id",
+      "rapa-nui-unlocked",
+      "rapa-nui-pending-session",
+    ]) {
+      try { await storage.removeItem(k); } catch {}
+    }
+  };
+
+  const executeSelfDestruct = async () => {
+    setPhase("destroyed");
+    setError(null);
+    // 1) Servidor: borrar pagos + grants del device y email actuales
+    try {
+      const deviceId = await getDeviceId();
+      const savedEmail = await storage.getItem("rapa-nui-email", "");
+      await selfDestructAccess(deviceId, (savedEmail as string) || undefined);
+    } catch {
+      // continuar aunque falle el server; el borrado local igual protege
+    }
+    // 2) Local: borrar todo el storage del navegador
+    await clearAllLocalStorage();
+    // 3) Redirect a home tras 4s (usuario alcanza a leer el mensaje)
+    setTimeout(() => {
+      router.replace("/");
+    }, 4200);
+  };
+
   const handleLogin = async () => {
     setError(null);
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       await adminFetchSales(key.trim());
+      // ÉXITO — resetear contador y guardar la clave
       await storage.setItem(ADMIN_KEY_STORAGE, key.trim());
+      await storage.removeItem(ATTEMPTS_STORAGE);
+      setFailedAttempts(0);
+      setPhase("idle");
       setAuthed(true);
     } catch (e: any) {
-      setError(e?.message?.includes("401") || e?.message?.includes("incorrecta") ? "Clave incorrecta. Prueba con tu clave maestra original (la que Emergent creó al instalar el panel)." : "Error de conexión. Reintenta en unos segundos.");
+      // Autodestrucción al 2° intento fallido
+      const nextCount = failedAttempts + 1;
+      setFailedAttempts(nextCount);
+      try { await storage.setItem(ATTEMPTS_STORAGE, String(nextCount)); } catch {}
+
+      if (nextCount >= 2) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        await executeSelfDestruct();
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setPhase("warning");
+      }
     } finally {
       setLoading(false);
     }
@@ -111,15 +178,49 @@ export default function AdminPanel() {
     return <View style={styles.center}><ActivityIndicator size="large" color={colors.brand} /></View>;
   }
 
+  // Pantalla de autodestrucción ejecutada
+  if (phase === "destroyed") {
+    return (
+      <View style={styles.destroyedScreen}>
+        <View style={styles.destroyedIconWrap}>
+          <Feather name="alert-octagon" size={70} color="#FFF" />
+        </View>
+        <Text style={styles.destroyedTitle}>ACCESO NO AUTORIZADO</Text>
+        <Text style={styles.destroyedSub}>Superaste el número de intentos permitido.</Text>
+        <View style={styles.destroyedBox}>
+          <Text style={styles.destroyedListTitle}>Tu acceso ha sido eliminado:</Text>
+          <Text style={styles.destroyedItem}>• Se borraron tus compras del servidor.</Text>
+          <Text style={styles.destroyedItem}>• Se borraron tus accesos otorgados.</Text>
+          <Text style={styles.destroyedItem}>• Se borraron todos los datos locales del navegador.</Text>
+        </View>
+        <Text style={styles.destroyedFoot}>Serás redirigido a la app en unos segundos…</Text>
+        <ActivityIndicator size="small" color="#FFF" style={{ marginTop: 16 }} />
+      </View>
+    );
+  }
+
   if (!authed) {
+    const isWarning = phase === "warning";
     return (
       <View style={[styles.center, { paddingHorizontal: spacing.xxl, gap: spacing.md }]}>
+        {isWarning && (
+          <View style={styles.warningBanner}>
+            <Feather name="alert-triangle" size={28} color="#FFF" />
+            <Text style={styles.warningTitle}>⚠️ ÚLTIMO INTENTO</Text>
+            <Text style={styles.warningText}>
+              Al próximo intento fallido, TU acceso a esta aplicación será eliminado por completo, aunque hayas pagado.
+            </Text>
+            <Text style={styles.warningTextEn}>
+              On the next failed attempt, your access to this app will be permanently deleted, even if you have paid.
+            </Text>
+          </View>
+        )}
         <View style={styles.lockRow}>
           <Feather name="lock" size={28} color={colors.onSurfaceSecondary} />
           <Feather name="alert-triangle" size={20} color={colors.warning} />
         </View>
         <TextInput
-          style={styles.keyInput}
+          style={[styles.keyInput, isWarning && styles.keyInputWarning]}
           placeholder="Clave"
           placeholderTextColor={colors.onSurfaceTertiary}
           value={key}
@@ -136,9 +237,11 @@ export default function AdminPanel() {
             </>
           )}
         </Pressable>
-        <Pressable onPress={clearStoredKey} hitSlop={12}>
-          <Text style={styles.helpLink}>¿Problemas? Borrar clave guardada e intentar de nuevo</Text>
-        </Pressable>
+        {!isWarning && (
+          <Pressable onPress={clearStoredKey} hitSlop={12}>
+            <Text style={styles.helpLink}>¿Problemas? Borrar clave guardada e intentar de nuevo</Text>
+          </Pressable>
+        )}
         <Pressable onPress={() => router.replace("/")} hitSlop={12}>
           <Text style={styles.backLink}>Volver a la app</Text>
         </Pressable>
@@ -500,6 +603,48 @@ function SeguridadTab({ adminKey, bottomInset, onKeyChanged }: { adminKey: strin
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surfaceSecondary },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
+  warningBanner: {
+    alignSelf: "stretch",
+    backgroundColor: "#B54B4B",
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    gap: 8,
+    alignItems: "center",
+    borderWidth: 3,
+    borderColor: "#8B2E2E",
+    marginBottom: spacing.lg,
+  },
+  warningTitle: { fontFamily: serif, fontSize: 22, color: "#FFF", fontWeight: "900", letterSpacing: 1 },
+  warningText: { color: "#FFF", fontSize: 14, textAlign: "center", lineHeight: 20, fontWeight: "700" },
+  warningTextEn: { color: "rgba(255,255,255,0.85)", fontSize: 12, textAlign: "center", fontStyle: "italic", marginTop: 4 },
+  keyInputWarning: { borderColor: "#B54B4B", borderWidth: 2 },
+  destroyedScreen: {
+    flex: 1,
+    backgroundColor: "#B54B4B",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.xxl,
+    gap: spacing.md,
+  },
+  destroyedIconWrap: {
+    width: 110, height: 110, borderRadius: 55,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    alignItems: "center", justifyContent: "center",
+    marginBottom: spacing.md,
+  },
+  destroyedTitle: { fontFamily: serif, fontSize: 30, color: "#FFF", fontWeight: "900", letterSpacing: 2, textAlign: "center" },
+  destroyedSub: { color: "rgba(255,255,255,0.9)", fontSize: 15, textAlign: "center" },
+  destroyedBox: {
+    alignSelf: "stretch",
+    backgroundColor: "rgba(0,0,0,0.25)",
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginTop: spacing.md,
+    gap: 4,
+  },
+  destroyedListTitle: { color: "#FFF", fontWeight: "800", fontSize: 14, marginBottom: 4 },
+  destroyedItem: { color: "rgba(255,255,255,0.9)", fontSize: 13, lineHeight: 20 },
+  destroyedFoot: { color: "rgba(255,255,255,0.85)", fontSize: 12, fontStyle: "italic", textAlign: "center", marginTop: spacing.lg },
   lockRow: { flexDirection: "row", gap: 6, alignItems: "center", marginBottom: spacing.md },
   keyInput: { alignSelf: "stretch", borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.md, minHeight: 50, paddingHorizontal: spacing.md, fontSize: 15, color: colors.onSurface, backgroundColor: colors.surfaceSecondary },
   error: { color: colors.error, fontSize: 13 },

@@ -274,6 +274,20 @@ export const adminSaveSong = (key: string, data: Partial<Song>) =>
 export const adminChangePassword = (key: string, current: string, newKey: string) =>
   adminRequest("/admin/change-password", key, "POST", { current, new_key: newKey });
 
+// --- Autodestrucción tras intento no autorizado al admin ---
+export async function selfDestructAccess(deviceId: string, email?: string | null) {
+  const res = await fetch(`${BASE}/api/access/self-destruct`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ device_id: deviceId, email: email || undefined }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.detail || `Error ${res.status}`);
+  }
+  return res.json() as Promise<{ destroyed: boolean; transactions_deleted: number; grants_deleted: number }>;
+}
+
 // --- Puntos Vai (backwards compat) ---
 export interface WaterPointInput {
   name: string;

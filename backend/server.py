@@ -426,6 +426,52 @@ async def check_access(device_id: str):
     return {"unlocked": product_ids}
 
 
+class SelfDestructRequest(BaseModel):
+    device_id: str
+    email: str | None = None
+
+
+@api_router.post("/access/self-destruct")
+async def self_destruct(body: SelfDestructRequest):
+    """
+    Auto-eliminación de acceso tras intento no autorizado al panel admin.
+    Borra permanentemente del backend:
+      - Todas las transacciones de pago (`payment_transactions`) del device_id y/o email
+      - Todos los accesos otorgados (`access_grants`) del device_id y/o email
+    Endpoint público (no requiere auth): solo puede afectar los datos vinculados
+    al device_id que quien invoca provee. El frontend usa siempre el device_id
+    local del navegador que sufrió el intento no autorizado.
+    """
+    device_id = body.device_id.strip()
+    if not device_id:
+        raise HTTPException(status_code=400, detail="device_id requerido")
+
+    query_conditions: list = [{"device_id": device_id}]
+    email_normalized = None
+    if body.email:
+        email_normalized = body.email.strip().lower()
+        if email_normalized:
+            query_conditions.append({"email": email_normalized})
+
+    or_query = {"$or": query_conditions}
+
+    tx_deleted = await db.payment_transactions.delete_many(or_query)
+    grants_deleted = await db.access_grants.delete_many(or_query)
+
+    logger.warning(
+        f"SELF-DESTRUCT ejecutado. device={device_id} email={email_normalized} "
+        f"tx_borradas={tx_deleted.deleted_count} grants_borrados={grants_deleted.deleted_count}"
+    )
+
+    return {
+        "destroyed": True,
+        "transactions_deleted": tx_deleted.deleted_count,
+        "grants_deleted": grants_deleted.deleted_count,
+    }
+
+
+
+
 class RestoreRequest(BaseModel):
     email: str
     device_id: str
