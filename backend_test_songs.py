@@ -20,7 +20,7 @@ ROOT_DIR = Path(__file__).parent / "backend"
 load_dotenv(ROOT_DIR / '.env')
 
 # Configuration
-BASE_URL = "https://rapa-nui-routes-1.preview.emergentagent.com/api"
+BASE_URL = "https://direct-link-9.preview.emergentagent.com/api"
 ADMIN_KEY = "RAPANUI-2026"
 
 # MongoDB connection
@@ -490,7 +490,7 @@ async def test_9_regression_main_endpoints():
                     "provider": "mercadopago",
                     "email": "test@example.cl",
                     "device_id": "test-song-crud",
-                    "origin_url": "https://rapa-nui-routes-1.preview.emergentagent.com"
+                    "origin_url": "https://direct-link-9.preview.emergentagent.com"
                 }
             )
             data = resp.json()

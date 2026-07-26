@@ -3,7 +3,7 @@ import os
 import pytest
 import requests
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://rapa-nui-routes-1.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://direct-link-9.preview.emergentagent.com").rstrip("/")
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
 
 

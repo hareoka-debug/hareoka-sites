@@ -18,7 +18,7 @@ ROOT_DIR = Path(__file__).parent / "backend"
 load_dotenv(ROOT_DIR / '.env')
 
 # Configuration
-BASE_URL = "https://rapa-nui-routes-1.preview.emergentagent.com/api"
+BASE_URL = "https://direct-link-9.preview.emergentagent.com/api"
 MASTER_KEY = "RAPANUI-2026"
 CUSTOM_KEY = "MI-CLAVE-CUSTOM-999"
 CUSTOM_KEY_2 = "otra-clave-999"
