@@ -274,18 +274,30 @@ export const adminSaveSong = (key: string, data: Partial<Song>) =>
 export const adminChangePassword = (key: string, current: string, newKey: string) =>
   adminRequest("/admin/change-password", key, "POST", { current, new_key: newKey });
 
+// --- Registro/blindaje del dispositivo del dueño ---
+export const adminRegisterDevice = (key: string, deviceId: string) =>
+  adminRequest("/admin/register-device", key, "POST", { device_id: deviceId });
+
+export const adminListOwnerDevices = (key: string) =>
+  adminRequest("/admin/owner-devices", key, "GET") as Promise<{ device_ids: string[] }>;
+
 // --- Autodestrucción tras intento no autorizado al admin ---
-export async function selfDestructAccess(deviceId: string, email?: string | null) {
+export async function selfDestructAccess(deviceId: string) {
   const res = await fetch(`${BASE}/api/access/self-destruct`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ device_id: deviceId, email: email || undefined }),
+    body: JSON.stringify({ device_id: deviceId }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => null);
     throw new Error(err?.detail || `Error ${res.status}`);
   }
-  return res.json() as Promise<{ destroyed: boolean; transactions_deleted: number; grants_deleted: number }>;
+  return res.json() as Promise<{
+    destroyed: boolean;
+    reason?: string;
+    transactions_deleted: number;
+    grants_deleted: number;
+  }>;
 }
 
 // --- Puntos Vai (backwards compat) ---

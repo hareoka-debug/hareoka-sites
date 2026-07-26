@@ -435,31 +435,37 @@ class SelfDestructRequest(BaseModel):
 async def self_destruct(body: SelfDestructRequest):
     """
     Auto-eliminación de acceso tras intento no autorizado al panel admin.
-    Borra permanentemente del backend:
-      - Todas las transacciones de pago (`payment_transactions`) del device_id y/o email
-      - Todos los accesos otorgados (`access_grants`) del device_id y/o email
-    Endpoint público (no requiere auth): solo puede afectar los datos vinculados
-    al device_id que quien invoca provee. El frontend usa siempre el device_id
-    local del navegador que sufrió el intento no autorizado.
+
+    IMPORTANTE (blindaje):
+      - Solo borra datos vinculados EXACTAMENTE al `device_id` que llama.
+      - NUNCA borra por email (para no afectar otros dispositivos del mismo
+        cliente ni a otros clientes con emails similares).
+      - Si el `device_id` está registrado en `admin_settings.owner_device_ids`
+        (dispositivo maestro del dueño), se rechaza la operación → así el
+        propio dueño no puede "quemarse" la app por error.
     """
     device_id = body.device_id.strip()
     if not device_id:
         raise HTTPException(status_code=400, detail="device_id requerido")
 
-    query_conditions: list = [{"device_id": device_id}]
-    email_normalized = None
-    if body.email:
-        email_normalized = body.email.strip().lower()
-        if email_normalized:
-            query_conditions.append({"email": email_normalized})
+    # Blindaje: dispositivo maestro del dueño no se autodestruye
+    settings_doc = await db.admin_settings.find_one({"id": "main"}) or {}
+    owner_devices = set(settings_doc.get("owner_device_ids") or [])
+    if device_id in owner_devices:
+        logger.warning(f"SELF-DESTRUCT ignorado: device {device_id} es dueño.")
+        return {
+            "destroyed": False,
+            "reason": "owner_device",
+            "transactions_deleted": 0,
+            "grants_deleted": 0,
+        }
 
-    or_query = {"$or": query_conditions}
-
-    tx_deleted = await db.payment_transactions.delete_many(or_query)
-    grants_deleted = await db.access_grants.delete_many(or_query)
+    # Solo por device_id — jamás por email
+    tx_deleted = await db.payment_transactions.delete_many({"device_id": device_id})
+    grants_deleted = await db.access_grants.delete_many({"device_id": device_id})
 
     logger.warning(
-        f"SELF-DESTRUCT ejecutado. device={device_id} email={email_normalized} "
+        f"SELF-DESTRUCT ejecutado. device={device_id} "
         f"tx_borradas={tx_deleted.deleted_count} grants_borrados={grants_deleted.deleted_count}"
     )
 
@@ -843,6 +849,52 @@ async def admin_change_password(body: ChangeAdminKeyRequest, request: Request):
         upsert=True,
     )
     return {"changed": True}
+
+
+# --- Registro de dispositivo del dueño (blindaje self-destruct) ---
+class RegisterOwnerDeviceRequest(BaseModel):
+    device_id: str
+
+
+@api_router.post("/admin/register-device")
+async def admin_register_device(body: RegisterOwnerDeviceRequest, request: Request):
+    """Marca el device_id actual como dispositivo del dueño para que el
+    mecanismo de autodestrucción nunca lo afecte. Solo accesible con clave admin."""
+    await _check_admin(request)
+    device_id = body.device_id.strip()
+    if not device_id:
+        raise HTTPException(status_code=400, detail="device_id requerido")
+    await db.admin_settings.update_one(
+        {"id": "main"},
+        {
+            "$setOnInsert": {"id": "main"},
+            "$addToSet": {"owner_device_ids": device_id},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()},
+        },
+        upsert=True,
+    )
+    return {"registered": True, "device_id": device_id}
+
+
+@api_router.post("/admin/unregister-device")
+async def admin_unregister_device(body: RegisterOwnerDeviceRequest, request: Request):
+    """Elimina un device_id de la lista de dispositivos del dueño."""
+    await _check_admin(request)
+    device_id = body.device_id.strip()
+    if not device_id:
+        raise HTTPException(status_code=400, detail="device_id requerido")
+    await db.admin_settings.update_one(
+        {"id": "main"},
+        {"$pull": {"owner_device_ids": device_id}},
+    )
+    return {"unregistered": True, "device_id": device_id}
+
+
+@api_router.get("/admin/owner-devices")
+async def admin_list_owner_devices(request: Request):
+    await _check_admin(request)
+    doc = await db.admin_settings.find_one({"id": "main"}) or {}
+    return {"device_ids": doc.get("owner_device_ids") or []}
 
 
 # --- Editor de Puntos Vai (compatibilidad con app original) ---

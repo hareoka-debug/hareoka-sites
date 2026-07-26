@@ -55,6 +55,7 @@ import {
   fetchProducts,
   getDeviceId,
   selfDestructAccess,
+  adminRegisterDevice,
 } from "@/src/lib/api";
 import { colors, radius, serif, spacing } from "@/src/lib/theme";
 
@@ -107,6 +108,12 @@ export default function AdminPanel() {
           await adminFetchSales(stored as string);
           setKey(stored as string);
           setAuthed(true);
+          // Blindaje: al reabrir el admin con sesión guardada, reafirmar
+          // que este dispositivo es del dueño.
+          try {
+            const deviceId = await getDeviceId();
+            await adminRegisterDevice(stored as string, deviceId);
+          } catch {}
         } catch {}
       }
       setCheckingStored(false);
@@ -134,11 +141,12 @@ export default function AdminPanel() {
   const executeSelfDestruct = async () => {
     setPhase("destroyed");
     setError(null);
-    // 1) Servidor: borrar pagos + grants del device y email actuales
+    // 1) Servidor: borrar pagos + grants EXCLUSIVAMENTE del device actual
+    //    (nunca por email → no afecta otros dispositivos ni otros clientes).
+    //    Si este device está marcado como dueño, el backend rechaza la operación.
     try {
       const deviceId = await getDeviceId();
-      const savedEmail = await storage.getItem("rapa-nui-email", "");
-      await selfDestructAccess(deviceId, (savedEmail as string) || undefined);
+      await selfDestructAccess(deviceId);
     } catch {
       // continuar aunque falle el server; el borrado local igual protege
     }
@@ -162,6 +170,12 @@ export default function AdminPanel() {
       setFailedAttempts(0);
       setPhase("idle");
       setAuthed(true);
+      // Blindaje: registrar este device como dispositivo del dueño para
+      // que la autodestrucción jamás pueda afectarlo.
+      try {
+        const deviceId = await getDeviceId();
+        await adminRegisterDevice(key.trim(), deviceId);
+      } catch {}
     } catch (e: any) {
       // Autodestrucción al 2° intento fallido
       const nextCount = failedAttempts + 1;
