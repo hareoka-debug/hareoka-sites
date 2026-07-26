@@ -486,12 +486,17 @@ function AccesoTab({ adminKey, bottomInset }: { adminKey: string; bottomInset: n
         <Text style={styles.fieldLabel}>Nota (opcional)</Text>
         <TextInput style={[styles.input, { minHeight: 60 }]} placeholder="comprobante, fecha, proveedor…" placeholderTextColor={colors.onSurfaceTertiary} value={note} onChangeText={setNote} multiline />
 
-        {msg && <Text style={[styles.msg, { color: msg.ok ? colors.success : colors.error }]}>{msg.text}</Text>}
-
         {selected.length > 0 && (
           <Text style={styles.helperCount}>
             {selected.length} producto{selected.length === 1 ? "" : "s"} seleccionado{selected.length === 1 ? "" : "s"}
           </Text>
+        )}
+
+        {msg && (
+          <View style={[styles.msgBox, msg.ok ? styles.msgBoxOk : styles.msgBoxErr]}>
+            <Feather name={msg.ok ? "check-circle" : "alert-circle"} size={18} color={msg.ok ? colors.success : colors.error} />
+            <Text style={[styles.msgBoxText, { color: msg.ok ? colors.success : colors.error }]}>{msg.text}</Text>
+          </View>
         )}
 
         <Pressable
@@ -770,6 +775,14 @@ const styles = StyleSheet.create({
 
   selectAll: { color: colors.brand, fontSize: 13, textDecorationLine: "underline", fontWeight: "700" },
   helperCount: { color: colors.brand, fontSize: 12, fontWeight: "700", textAlign: "center", marginTop: spacing.sm },
+  msgBox: {
+    flexDirection: "row", gap: 8, alignItems: "center",
+    padding: spacing.md, borderRadius: radius.md,
+    marginTop: spacing.sm, borderWidth: 1,
+  },
+  msgBoxOk: { backgroundColor: "#E8F5E9", borderColor: colors.success },
+  msgBoxErr: { backgroundColor: "#FFEBEE", borderColor: colors.error },
+  msgBoxText: { flex: 1, fontSize: 13, fontWeight: "600" },
   checkRow: {
     flexDirection: "row", gap: 10, alignItems: "center",
     paddingVertical: spacing.md, paddingHorizontal: spacing.md,
