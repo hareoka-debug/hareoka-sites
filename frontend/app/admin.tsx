@@ -459,12 +459,25 @@ function AccesoTab({ adminKey, bottomInset }: { adminKey: string; bottomInset: n
         <TextInput style={styles.input} placeholder="cliente@correo.com" placeholderTextColor={colors.onSurfaceTertiary} autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
 
         <Text style={styles.fieldLabel}>Productos a otorgar (puedes elegir varios)</Text>
-        <Pressable onPress={selectAll}><Text style={styles.selectAll}>Elegir todos</Text></Pressable>
+        <Pressable onPress={selectAll} hitSlop={12} style={{ paddingVertical: 8 }}>
+          <Text style={styles.selectAll}>Elegir todos</Text>
+        </Pressable>
         {products.map((p) => {
           const active = selected.includes(p.id);
           return (
-            <Pressable key={p.id} style={[styles.checkRow, active && styles.checkRowActive]} onPress={() => toggle(p.id)}>
-              <View style={[styles.checkbox, active && styles.checkboxActive]}>{active && <Feather name="check" size={14} color="#FFF" />}</View>
+            <Pressable
+              key={p.id}
+              style={({ pressed }) => [styles.checkRow, active && styles.checkRowActive, pressed && { opacity: 0.7 }]}
+              onPress={() => toggle(p.id)}
+              hitSlop={8}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: active }}
+              accessibilityLabel={`${active ? "Quitar" : "Añadir"} ${p.name}`}
+              testID={`chk-${p.id}`}
+            >
+              <View style={[styles.checkbox, active && styles.checkboxActive]}>
+                {active && <Feather name="check" size={14} color="#FFF" />}
+              </View>
               <Text style={styles.checkName}>{p.name} <Text style={styles.checkPrice}>(${p.amount_clp.toLocaleString("es-CL")})</Text></Text>
             </Pressable>
           );
@@ -475,7 +488,18 @@ function AccesoTab({ adminKey, bottomInset }: { adminKey: string; bottomInset: n
 
         {msg && <Text style={[styles.msg, { color: msg.ok ? colors.success : colors.error }]}>{msg.text}</Text>}
 
-        <Pressable style={styles.grantBtn} onPress={grant} disabled={saving || selected.length === 0}>
+        {selected.length > 0 && (
+          <Text style={styles.helperCount}>
+            {selected.length} producto{selected.length === 1 ? "" : "s"} seleccionado{selected.length === 1 ? "" : "s"}
+          </Text>
+        )}
+
+        <Pressable
+          style={[styles.grantBtn, saving && { opacity: 0.6 }]}
+          onPress={grant}
+          disabled={saving}
+          testID="btn-conceder-acceso"
+        >
           {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.grantBtnText}>Conceder acceso</Text>}
         </Pressable>
         <Text style={styles.totalLine}>Total accesos concedidos manualmente: {total}</Text>
@@ -744,8 +768,16 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 11, fontWeight: "700", color: colors.onSurfaceTertiary, marginTop: spacing.sm, letterSpacing: 1 },
   input: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.md, minHeight: 46, paddingHorizontal: spacing.md, fontSize: 14, color: colors.onSurface, backgroundColor: colors.surfaceSecondary },
 
-  selectAll: { color: colors.brand, fontSize: 12, textDecorationLine: "underline", fontWeight: "700" },
-  checkRow: { flexDirection: "row", gap: 10, alignItems: "center", padding: spacing.sm, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
+  selectAll: { color: colors.brand, fontSize: 13, textDecorationLine: "underline", fontWeight: "700" },
+  helperCount: { color: colors.brand, fontSize: 12, fontWeight: "700", textAlign: "center", marginTop: spacing.sm },
+  checkRow: {
+    flexDirection: "row", gap: 10, alignItems: "center",
+    paddingVertical: spacing.md, paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 1, borderColor: colors.border,
+    minHeight: 48,
+  },
   checkRowActive: { borderColor: colors.brand, backgroundColor: colors.brandTertiary },
   checkbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 1.5, borderColor: colors.border, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
   checkboxActive: { backgroundColor: colors.brand, borderColor: colors.brand },
