@@ -676,6 +676,7 @@ class ManualAccessRequest(BaseModel):
     email: str
     product_ids: list[str]
     note: str | None = None
+    bind_device_id: str | None = None  # si viene, aplica el acceso también a ese device (uso inmediato)
 
 
 @api_router.post("/admin/manual-access")
@@ -688,12 +689,14 @@ async def admin_grant_manual_access(body: ManualAccessRequest, request: Request)
         raise HTTPException(status_code=400, detail="Elige al menos 1 producto")
 
     device_key = f"manual:{email}"
+    bind_device = (body.bind_device_id or "").strip() or None
     now = datetime.now(timezone.utc).isoformat()
     granted = []
     for pid in body.product_ids:
         p = get_product(pid)
         if not p or p.get("always_free"):
             continue
+        # Grant "por email" (fuente de verdad para restore)
         await db.access_grants.update_one(
             {"device_id": device_key, "product_id": pid},
             {"$set": {
@@ -706,8 +709,22 @@ async def admin_grant_manual_access(body: ManualAccessRequest, request: Request)
             }},
             upsert=True,
         )
+        # Grant adicional aplicado al dispositivo indicado (uso inmediato sin restore)
+        if bind_device:
+            await db.access_grants.update_one(
+                {"device_id": bind_device, "product_id": pid},
+                {"$set": {
+                    "device_id": bind_device,
+                    "product_id": pid,
+                    "email": email,
+                    "source": "manual-direct",
+                    "note": body.note or "",
+                    "granted_at": now,
+                }},
+                upsert=True,
+            )
         granted.append(pid)
-    return {"granted": granted, "email": email}
+    return {"granted": granted, "email": email, "bound_to_device": bool(bind_device)}
 
 
 class RevokeAccessRequest(BaseModel):

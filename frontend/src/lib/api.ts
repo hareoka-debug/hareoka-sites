@@ -236,8 +236,19 @@ export const adminFetchSales = (key: string) =>
 export const adminResetSales = (key: string) =>
   adminRequest("/admin/sales/reset", key, "POST", { confirm: "BORRAR" });
 
-export const adminGrantManual = (key: string, email: string, productIds: string[], note: string) =>
-  adminRequest("/admin/manual-access", key, "POST", { email, product_ids: productIds, note });
+export const adminGrantManual = (
+  key: string,
+  email: string,
+  productIds: string[],
+  note: string,
+  bindDeviceId?: string | null,
+) =>
+  adminRequest("/admin/manual-access", key, "POST", {
+    email,
+    product_ids: productIds,
+    note,
+    bind_device_id: bindDeviceId || undefined,
+  });
 
 export const adminRevokeManual = (key: string, email: string) =>
   adminRequest("/admin/manual-access/revoke", key, "POST", { email });
