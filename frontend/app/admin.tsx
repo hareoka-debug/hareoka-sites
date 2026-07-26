@@ -413,6 +413,7 @@ function AccesoTab({ adminKey, bottomInset }: { adminKey: string; bottomInset: n
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [total, setTotal] = useState(0);
+  const [items, setItems] = useState<{ email: string; products: string[]; note: string; granted_at: string }[]>([]);
   const [applyHere, setApplyHere] = useState(false);
 
   const load = useCallback(async () => {
@@ -421,6 +422,7 @@ function AccesoTab({ adminKey, bottomInset }: { adminKey: string; bottomInset: n
       setProducts(list.filter((p) => !p.always_free));
       const l = await adminListManual(adminKey);
       setTotal(l.total);
+      setItems(l.items || []);
     } catch {}
   }, [adminKey]);
 
@@ -567,6 +569,60 @@ function AccesoTab({ adminKey, bottomInset }: { adminKey: string; bottomInset: n
           <Text style={styles.revokeText}>Revocar todos los accesos de este email</Text>
         </Pressable>
       </View>
+
+      {items.length > 0 && (
+        <View style={styles.card}>
+          <View style={styles.iconBubble}><Feather name="users" size={20} color="#FFF" /></View>
+          <Text style={styles.cardTitle}>Accesos otorgados manualmente</Text>
+          <Text style={styles.cardSub}>Lista de clientes a los que ya diste acceso manual. Toca &quot;Revocar&quot; para quitarlo.</Text>
+          {items.map((it, idx) => {
+            const productNames = it.products
+              .map((pid) => products.find((p) => p.id === pid)?.name || pid)
+              .join(", ");
+            const dateStr = it.granted_at
+              ? new Date(it.granted_at).toLocaleDateString("es-CL", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })
+              : "—";
+            return (
+              <View key={`${it.email}-${idx}`} style={styles.grantRow}>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={styles.grantEmail}>{it.email}</Text>
+                  <Text style={styles.grantProducts}>🎫 {productNames}</Text>
+                  {!!it.note && <Text style={styles.grantNote}>📝 {it.note}</Text>}
+                  <Text style={styles.grantDate}>📅 {dateStr}</Text>
+                </View>
+                <Pressable
+                  onPress={() => {
+                    confirmAction(
+                      "¿Revocar accesos?",
+                      `Se revocarán TODOS los accesos manuales de ${it.email}`,
+                      "Sí, revocar",
+                      async () => {
+                        try {
+                          await adminRevokeManual(adminKey, it.email);
+                          setMsg({ ok: true, text: `✓ Accesos revocados a ${it.email}` });
+                          await load();
+                        } catch (e: any) {
+                          setMsg({ ok: false, text: e?.message || "Error al revocar" });
+                        }
+                      },
+                    );
+                  }}
+                  style={({ pressed }) => [styles.grantRevokeBtn, pressed && { opacity: 0.7 }]}
+                  hitSlop={8}
+                  testID={`revoke-${it.email}`}
+                >
+                  <Feather name="user-x" size={14} color={colors.error} />
+                  <Text style={styles.grantRevokeText}>Revocar</Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -855,6 +911,34 @@ const styles = StyleSheet.create({
   totalLine: { fontSize: 12, color: colors.onSurfaceTertiary, textAlign: "center", marginTop: spacing.sm },
   revokeBtn: { flexDirection: "row", gap: 6, alignSelf: "center", alignItems: "center", marginTop: spacing.md, padding: 8 },
   revokeText: { color: colors.error, fontSize: 12, textDecorationLine: "underline" },
+
+  grantRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: spacing.sm,
+  },
+  grantEmail: { fontSize: 14, fontWeight: "700", color: colors.onSurface },
+  grantProducts: { fontSize: 12, color: colors.onSurfaceSecondary },
+  grantNote: { fontSize: 11, color: colors.onSurfaceTertiary, fontStyle: "italic" },
+  grantDate: { fontSize: 11, color: colors.onSurfaceTertiary },
+  grantRevokeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.error,
+    backgroundColor: "#FFEBEE",
+  },
+  grantRevokeText: { color: colors.error, fontSize: 12, fontWeight: "700" },
 
   routeCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border, gap: 3 },
   routeName: { fontSize: 15, fontWeight: "700", color: colors.onSurface },

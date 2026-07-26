@@ -1,394 +1,598 @@
 #!/usr/bin/env python3
 """
-Test suite for admin authentication master key recovery bug fix.
-Tests that the DEFAULT_ADMIN_KEY (RAPANUI-2026) ALWAYS works as a master recovery key,
-even after the user changes their password to a custom key.
+Backend test for /api/admin/manual-access GET endpoint bug fix.
+
+This test verifies the fix for the bug where the owner saw "Total: 0" and no list
+of granted accesses despite having granted access manually.
+
+The fix ensures:
+1. Only counts source-of-truth grants (device_id starting with "manual:")
+2. Deduplicates products per email
+3. Sorts by granted_at descending
+4. Does not double-count when clients restore or when bind_device_id is used
 """
 
 import httpx
-import sys
 import asyncio
-from motor.motor_asyncio import AsyncIOMotorClient
-import os
-from dotenv import load_dotenv
-from pathlib import Path
+import sys
+from datetime import datetime
 
-# Load environment variables
-ROOT_DIR = Path(__file__).parent / "backend"
-load_dotenv(ROOT_DIR / '.env')
-
-# Configuration
+# Backend URL
 BASE_URL = "https://direct-link-9.preview.emergentagent.com/api"
-MASTER_KEY = "RAPANUI-2026"
-CUSTOM_KEY = "MI-CLAVE-CUSTOM-999"
-CUSTOM_KEY_2 = "otra-clave-999"
-
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+ADMIN_KEY = "RAPANUI-2026"
 
 # Test results tracking
+tests_passed = 0
+tests_failed = 0
 test_results = []
 
 
-def log_test(test_name: str, passed: bool, details: str = ""):
+def log_test(name: str, passed: bool, details: str = ""):
     """Log test result"""
-    status = "✅ PASS" if passed else "❌ FAIL"
-    test_results.append({"name": test_name, "passed": passed, "details": details})
-    print(f"{status}: {test_name}")
+    global tests_passed, tests_failed
+    if passed:
+        tests_passed += 1
+        status = "✅ PASS"
+    else:
+        tests_failed += 1
+        status = "❌ FAIL"
+    
+    result = f"{status}: {name}"
     if details:
-        print(f"   {details}")
+        result += f"\n    {details}"
+    test_results.append(result)
+    print(result)
 
 
-async def reset_admin_key_to_default():
-    """Reset admin_settings.admin_key to default RAPANUI-2026"""
-    await db.admin_settings.update_one(
-        {"id": "main"},
-        {"$set": {"id": "main", "admin_key": MASTER_KEY}},
-        upsert=True
-    )
-    print(f"🔧 Reset admin_key in DB to: {MASTER_KEY}")
-
-
-async def get_current_admin_key_from_db():
-    """Get current admin_key from database"""
-    doc = await db.admin_settings.find_one({"id": "main"})
-    if doc and doc.get("admin_key"):
-        return doc["admin_key"]
-    return None
-
-
-async def test_1_initial_state_default_key():
-    """Test 1: Estado inicial - solo clave por defecto en DB"""
-    print("\n" + "="*80)
-    print("TEST 1: Estado inicial - solo clave por defecto en DB")
-    print("="*80)
-    
-    # Ensure DB has default key
-    await reset_admin_key_to_default()
+async def test_auth_checks():
+    """Test 1: Auth check - verify admin key is required"""
+    print("\n=== TEST 1: Auth Checks ===")
     
     async with httpx.AsyncClient(timeout=30.0) as client:
-        # Test 1a: Master key should work
-        try:
-            resp = await client.get(
-                f"{BASE_URL}/admin/sales",
-                headers={"X-Admin-Key": MASTER_KEY}
-            )
-            log_test(
-                "1a. GET /admin/sales with master key RAPANUI-2026",
-                resp.status_code == 200,
-                f"Status: {resp.status_code}"
-            )
-        except Exception as e:
-            log_test("1a. GET /admin/sales with master key RAPANUI-2026", False, f"Error: {e}")
-        
-        # Test 1b: Wrong key should fail
-        try:
-            resp = await client.get(
-                f"{BASE_URL}/admin/sales",
-                headers={"X-Admin-Key": "XXX"}
-            )
-            log_test(
-                "1b. GET /admin/sales with wrong key 'XXX'",
-                resp.status_code == 401,
-                f"Status: {resp.status_code} (expected 401)"
-            )
-        except Exception as e:
-            log_test("1b. GET /admin/sales with wrong key 'XXX'", False, f"Error: {e}")
-        
-        # Test 1c: No header should fail
-        try:
-            resp = await client.get(f"{BASE_URL}/admin/sales")
-            log_test(
-                "1c. GET /admin/sales without header",
-                resp.status_code == 401,
-                f"Status: {resp.status_code} (expected 401)"
-            )
-        except Exception as e:
-            log_test("1c. GET /admin/sales without header", False, f"Error: {e}")
-
-
-async def test_2_change_password_to_custom():
-    """Test 2: Simular cambio de clave via Seguridad"""
-    print("\n" + "="*80)
-    print("TEST 2: Simular cambio de clave via Seguridad")
-    print("="*80)
-    
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        # Change password from RAPANUI-2026 to MI-CLAVE-CUSTOM-999
-        try:
-            resp = await client.post(
-                f"{BASE_URL}/admin/change-password",
-                headers={"X-Admin-Key": MASTER_KEY},
-                json={"current": MASTER_KEY, "new_key": CUSTOM_KEY}
-            )
-            passed = resp.status_code == 200 and resp.json().get("changed") == True
-            log_test(
-                "2a. POST /admin/change-password (RAPANUI-2026 → MI-CLAVE-CUSTOM-999)",
-                passed,
-                f"Status: {resp.status_code}, Response: {resp.json()}"
-            )
-        except Exception as e:
-            log_test("2a. POST /admin/change-password", False, f"Error: {e}")
-        
-        # Verify in DB
-        db_key = await get_current_admin_key_from_db()
+        # Test 1a: No header → expect 401
+        resp = await client.get(f"{BASE_URL}/admin/manual-access")
         log_test(
-            "2b. Verify admin_key in DB is now MI-CLAVE-CUSTOM-999",
-            db_key == CUSTOM_KEY,
-            f"DB admin_key: {db_key}"
+            "Auth: No header → 401",
+            resp.status_code == 401,
+            f"Status: {resp.status_code}, Expected: 401"
+        )
+        
+        # Test 1b: Wrong key → expect 401
+        resp = await client.get(
+            f"{BASE_URL}/admin/manual-access",
+            headers={"X-Admin-Key": "WRONG-KEY-123"}
+        )
+        log_test(
+            "Auth: Wrong key → 401",
+            resp.status_code == 401,
+            f"Status: {resp.status_code}, Expected: 401"
+        )
+        
+        # Test 1c: Correct key → expect 200
+        resp = await client.get(
+            f"{BASE_URL}/admin/manual-access",
+            headers={"X-Admin-Key": ADMIN_KEY}
+        )
+        log_test(
+            "Auth: Correct key → 200",
+            resp.status_code == 200,
+            f"Status: {resp.status_code}, Expected: 200"
         )
 
 
-async def test_3_master_key_recovery():
-    """Test 3: CRÍTICO - verificar recuperación con clave maestra"""
-    print("\n" + "="*80)
-    print("TEST 3: CRÍTICO - verificar recuperación con clave maestra")
-    print("="*80)
+async def test_baseline_state():
+    """Test 2: Baseline / current state - verify existing grant"""
+    print("\n=== TEST 2: Baseline / Current State ===")
     
     async with httpx.AsyncClient(timeout=30.0) as client:
-        # Test 3a: Custom key should work
-        try:
-            resp = await client.get(
-                f"{BASE_URL}/admin/sales",
-                headers={"X-Admin-Key": CUSTOM_KEY}
-            )
-            log_test(
-                "3a. GET /admin/sales with custom key MI-CLAVE-CUSTOM-999",
-                resp.status_code == 200,
-                f"Status: {resp.status_code} (custom key works)"
-            )
-        except Exception as e:
-            log_test("3a. GET /admin/sales with custom key", False, f"Error: {e}")
-        
-        # Test 3b: CRITICAL - Master key should STILL work (recovery mechanism)
-        try:
-            resp = await client.get(
-                f"{BASE_URL}/admin/sales",
-                headers={"X-Admin-Key": MASTER_KEY}
-            )
-            log_test(
-                "3b. 🔑 GET /admin/sales with master key RAPANUI-2026 (RECOVERY TEST)",
-                resp.status_code == 200,
-                f"Status: {resp.status_code} (master key STILL works - THIS IS THE FIX!)"
-            )
-        except Exception as e:
-            log_test("3b. GET /admin/sales with master key (RECOVERY)", False, f"Error: {e}")
-        
-        # Test 3c: Wrong key should fail
-        try:
-            resp = await client.get(
-                f"{BASE_URL}/admin/sales",
-                headers={"X-Admin-Key": "xyz-wrong"}
-            )
-            log_test(
-                "3c. GET /admin/sales with wrong key 'xyz-wrong'",
-                resp.status_code == 401,
-                f"Status: {resp.status_code} (expected 401)"
-            )
-        except Exception as e:
-            log_test("3c. GET /admin/sales with wrong key", False, f"Error: {e}")
-
-
-async def test_4_other_admin_routes_accept_both_keys():
-    """Test 4: Otras rutas admin también aceptan ambas claves"""
-    print("\n" + "="*80)
-    print("TEST 4: Otras rutas admin también aceptan ambas claves")
-    print("="*80)
-    
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        # Test 4a: Manual access with master key
-        try:
-            resp = await client.post(
-                f"{BASE_URL}/admin/manual-access",
-                headers={"X-Admin-Key": MASTER_KEY},
-                json={
-                    "email": "test@rapa.cl",
-                    "product_ids": ["song"],
-                    "note": "test master key"
-                }
-            )
-            data = resp.json()
-            passed = (
-                resp.status_code == 200 and
-                data.get("granted") == ["song"] and
-                data.get("email") == "test@rapa.cl"
-            )
-            log_test(
-                "4a. POST /admin/manual-access with master key",
-                passed,
-                f"Status: {resp.status_code}, Response: {data}"
-            )
-        except Exception as e:
-            log_test("4a. POST /admin/manual-access with master key", False, f"Error: {e}")
-        
-        # Test 4b: Revoke access with custom key
-        try:
-            resp = await client.post(
-                f"{BASE_URL}/admin/manual-access/revoke",
-                headers={"X-Admin-Key": CUSTOM_KEY},
-                json={"email": "test@rapa.cl"}
-            )
-            data = resp.json()
-            passed = resp.status_code == 200 and data.get("deleted", 0) > 0
-            log_test(
-                "4b. POST /admin/manual-access/revoke with custom key",
-                passed,
-                f"Status: {resp.status_code}, Deleted: {data.get('deleted')}"
-            )
-        except Exception as e:
-            log_test("4b. POST /admin/manual-access/revoke with custom key", False, f"Error: {e}")
-        
-        # Test 4c: GET /admin/routes with master key
-        try:
-            resp = await client.get(
-                f"{BASE_URL}/admin/routes",
-                headers={"X-Admin-Key": MASTER_KEY}
-            )
-            data = resp.json()
-            passed = resp.status_code == 200 and isinstance(data, list) and len(data) == 11
-            log_test(
-                "4c. GET /admin/routes with master key",
-                passed,
-                f"Status: {resp.status_code}, Routes count: {len(data) if isinstance(data, list) else 'N/A'}"
-            )
-        except Exception as e:
-            log_test("4c. GET /admin/routes with master key", False, f"Error: {e}")
-
-
-async def test_5_password_change_validation():
-    """Test 5: Regresión - cambio de clave sigue exigiendo clave actual correcta"""
-    print("\n" + "="*80)
-    print("TEST 5: Regresión - cambio de clave sigue exigiendo clave actual correcta")
-    print("="*80)
-    
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        # Test 5a: Change password with correct current key
-        try:
-            resp = await client.post(
-                f"{BASE_URL}/admin/change-password",
-                headers={"X-Admin-Key": MASTER_KEY},
-                json={"current": CUSTOM_KEY, "new_key": CUSTOM_KEY_2}
-            )
-            passed = resp.status_code == 200 and resp.json().get("changed") == True
-            log_test(
-                "5a. POST /admin/change-password with correct current key",
-                passed,
-                f"Status: {resp.status_code}, Changed: {resp.json().get('changed')}"
-            )
-        except Exception as e:
-            log_test("5a. POST /admin/change-password with correct current", False, f"Error: {e}")
-        
-        # Test 5b: Try to change password with wrong current key
-        try:
-            resp = await client.post(
-                f"{BASE_URL}/admin/change-password",
-                headers={"X-Admin-Key": MASTER_KEY},
-                json={"current": "clave-incorrecta", "new_key": "yyy"}
-            )
-            log_test(
-                "5b. POST /admin/change-password with wrong current key",
-                resp.status_code == 401,
-                f"Status: {resp.status_code} (expected 401)"
-            )
-        except Exception as e:
-            log_test("5b. POST /admin/change-password with wrong current", False, f"Error: {e}")
-
-
-async def test_6_restore_default_state():
-    """Test 6: Restaurar estado - volver a clave por defecto"""
-    print("\n" + "="*80)
-    print("TEST 6: Restaurar estado - volver a clave por defecto")
-    print("="*80)
-    
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        # Restore to default key
-        try:
-            resp = await client.post(
-                f"{BASE_URL}/admin/change-password",
-                headers={"X-Admin-Key": MASTER_KEY},
-                json={"current": CUSTOM_KEY_2, "new_key": MASTER_KEY}
-            )
-            passed = resp.status_code == 200 and resp.json().get("changed") == True
-            log_test(
-                "6a. POST /admin/change-password (restore to RAPANUI-2026)",
-                passed,
-                f"Status: {resp.status_code}, Changed: {resp.json().get('changed')}"
-            )
-        except Exception as e:
-            log_test("6a. POST /admin/change-password (restore)", False, f"Error: {e}")
-        
-        # Verify master key works
-        try:
-            resp = await client.get(
-                f"{BASE_URL}/admin/sales",
-                headers={"X-Admin-Key": MASTER_KEY}
-            )
-            log_test(
-                "6b. GET /admin/sales with master key (verify restore)",
-                resp.status_code == 200,
-                f"Status: {resp.status_code}"
-            )
-        except Exception as e:
-            log_test("6b. GET /admin/sales (verify restore)", False, f"Error: {e}")
-        
-        # Verify DB state
-        db_key = await get_current_admin_key_from_db()
-        log_test(
-            "6c. Verify admin_key in DB is back to RAPANUI-2026",
-            db_key == MASTER_KEY,
-            f"DB admin_key: {db_key}"
+        resp = await client.get(
+            f"{BASE_URL}/admin/manual-access",
+            headers={"X-Admin-Key": ADMIN_KEY}
         )
+        
+        if resp.status_code != 200:
+            log_test(
+                "Baseline: GET request",
+                False,
+                f"Status: {resp.status_code}, Expected: 200"
+            )
+            return None
+        
+        data = resp.json()
+        
+        # Check response structure
+        has_items = "items" in data
+        has_total = "total" in data
+        log_test(
+            "Baseline: Response has {items, total}",
+            has_items and has_total,
+            f"Has items: {has_items}, Has total: {has_total}"
+        )
+        
+        if not (has_items and has_total):
+            return None
+        
+        items = data["items"]
+        total = data["total"]
+        
+        # Check total >= 1
+        log_test(
+            "Baseline: total >= 1",
+            total >= 1,
+            f"Total: {total}, Expected: >= 1"
+        )
+        
+        # Find antuaji@gmail.com
+        antuaji_entry = None
+        for item in items:
+            if item.get("email") == "antuaji@gmail.com":
+                antuaji_entry = item
+                break
+        
+        log_test(
+            "Baseline: antuaji@gmail.com appears in items",
+            antuaji_entry is not None,
+            f"Found: {antuaji_entry is not None}"
+        )
+        
+        if antuaji_entry:
+            products = antuaji_entry.get("products", [])
+            # Check that "song" appears exactly once (not duplicated)
+            song_count = products.count("song")
+            log_test(
+                "Baseline: antuaji@gmail.com has 'song' exactly once (dedup fix)",
+                song_count == 1,
+                f"Products: {products}, 'song' count: {song_count}, Expected: 1"
+            )
+            
+            # Check required fields
+            has_email = "email" in antuaji_entry
+            has_products = "products" in antuaji_entry
+            has_note = "note" in antuaji_entry
+            has_granted_at = "granted_at" in antuaji_entry
+            log_test(
+                "Baseline: Item has required fields",
+                has_email and has_products and has_note and has_granted_at,
+                f"email: {has_email}, products: {has_products}, note: {has_note}, granted_at: {has_granted_at}"
+            )
+        
+        print(f"\n📊 Current state: Total={total}, Items count={len(items)}")
+        for item in items:
+            print(f"  - {item.get('email')}: products={item.get('products')}, note='{item.get('note', '')}', granted_at={item.get('granted_at')}")
+        
+        return data
+
+
+async def test_grant_list_verify():
+    """Test 3: Grant → List → Verify counting"""
+    print("\n=== TEST 3: Grant → List → Verify Counting ===")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Get initial state
+        resp = await client.get(
+            f"{BASE_URL}/admin/manual-access",
+            headers={"X-Admin-Key": ADMIN_KEY}
+        )
+        initial_total = resp.json()["total"] if resp.status_code == 200 else 0
+        
+        # Grant access
+        grant_body = {
+            "email": "test-list-bug@rapanui.cl",
+            "product_ids": ["agencies", "restaurants"],
+            "note": "test bug fix"
+        }
+        resp = await client.post(
+            f"{BASE_URL}/admin/manual-access",
+            json=grant_body,
+            headers={"X-Admin-Key": ADMIN_KEY}
+        )
+        
+        log_test(
+            "Grant: POST manual-access → 200",
+            resp.status_code == 200,
+            f"Status: {resp.status_code}, Expected: 200"
+        )
+        
+        if resp.status_code != 200:
+            print(f"Grant failed: {resp.text}")
+            return
+        
+        # Get updated list
+        resp = await client.get(
+            f"{BASE_URL}/admin/manual-access",
+            headers={"X-Admin-Key": ADMIN_KEY}
+        )
+        
+        if resp.status_code != 200:
+            log_test("Grant: GET after grant", False, f"Status: {resp.status_code}")
+            return
+        
+        data = resp.json()
+        new_total = data["total"]
+        items = data["items"]
+        
+        # Check total increased by 1
+        log_test(
+            "Grant: Total increased by 1",
+            new_total == initial_total + 1,
+            f"Initial: {initial_total}, New: {new_total}, Expected: {initial_total + 1}"
+        )
+        
+        # Find the new email
+        test_entry = None
+        for item in items:
+            if item.get("email") == "test-list-bug@rapanui.cl":
+                test_entry = item
+                break
+        
+        log_test(
+            "Grant: New email appears in items",
+            test_entry is not None,
+            f"Found: {test_entry is not None}"
+        )
+        
+        if test_entry:
+            products = test_entry.get("products", [])
+            # Check products contain both agencies and restaurants (no duplicates)
+            has_agencies = "agencies" in products
+            has_restaurants = "restaurants" in products
+            no_duplicates = len(products) == len(set(products))
+            
+            log_test(
+                "Grant: Products contain ['agencies', 'restaurants'] (no duplicates)",
+                has_agencies and has_restaurants and no_duplicates,
+                f"Products: {products}, Has agencies: {has_agencies}, Has restaurants: {has_restaurants}, No duplicates: {no_duplicates}"
+            )
+            
+            # Check note
+            note = test_entry.get("note", "")
+            log_test(
+                "Grant: Note is 'test bug fix'",
+                note == "test bug fix",
+                f"Note: '{note}', Expected: 'test bug fix'"
+            )
+            
+            # Check granted_at is valid ISO date
+            granted_at = test_entry.get("granted_at", "")
+            try:
+                datetime.fromisoformat(granted_at.replace("Z", "+00:00"))
+                is_valid_date = True
+            except:
+                is_valid_date = False
+            
+            log_test(
+                "Grant: granted_at is valid ISO date",
+                is_valid_date,
+                f"granted_at: {granted_at}, Valid: {is_valid_date}"
+            )
+
+
+async def test_grant_with_bind_device():
+    """Test 4: Grant with bind_device_id → should NOT duplicate email in list"""
+    print("\n=== TEST 4: Grant with bind_device_id → No Duplication ===")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Grant with bind_device_id
+        grant_body = {
+            "email": "test-bind@rapanui.cl",
+            "product_ids": ["agencies"],
+            "note": "with bind",
+            "bind_device_id": "test-device-xyz"
+        }
+        resp = await client.post(
+            f"{BASE_URL}/admin/manual-access",
+            json=grant_body,
+            headers={"X-Admin-Key": ADMIN_KEY}
+        )
+        
+        log_test(
+            "Bind: POST with bind_device_id → 200",
+            resp.status_code == 200,
+            f"Status: {resp.status_code}, Expected: 200"
+        )
+        
+        if resp.status_code != 200:
+            print(f"Grant with bind failed: {resp.text}")
+            return
+        
+        # Get list
+        resp = await client.get(
+            f"{BASE_URL}/admin/manual-access",
+            headers={"X-Admin-Key": ADMIN_KEY}
+        )
+        
+        if resp.status_code != 200:
+            log_test("Bind: GET after grant", False, f"Status: {resp.status_code}")
+            return
+        
+        data = resp.json()
+        items = data["items"]
+        
+        # Count how many times test-bind@rapanui.cl appears
+        bind_entries = [item for item in items if item.get("email") == "test-bind@rapanui.cl"]
+        
+        log_test(
+            "Bind: test-bind@rapanui.cl appears exactly once (not twice)",
+            len(bind_entries) == 1,
+            f"Count: {len(bind_entries)}, Expected: 1 (fix filters by device_id regex '^manual:')"
+        )
+        
+        if bind_entries:
+            products = bind_entries[0].get("products", [])
+            agencies_count = products.count("agencies")
+            log_test(
+                "Bind: Products contain 'agencies' exactly once",
+                agencies_count == 1,
+                f"Products: {products}, 'agencies' count: {agencies_count}, Expected: 1"
+            )
+
+
+async def test_client_restore_no_double_count():
+    """Test 5: Client restore does NOT double-count"""
+    print("\n=== TEST 5: Client Restore Does NOT Double-Count ===")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Simulate customer restore
+        restore_body = {
+            "email": "test-list-bug@rapanui.cl",
+            "device_id": "customer-device-abc"
+        }
+        resp = await client.post(
+            f"{BASE_URL}/payments/restore",
+            json=restore_body
+        )
+        
+        log_test(
+            "Restore: POST /payments/restore → 200",
+            resp.status_code == 200,
+            f"Status: {resp.status_code}, Expected: 200"
+        )
+        
+        if resp.status_code == 200:
+            restore_data = resp.json()
+            unlocked = restore_data.get("unlocked", [])
+            has_agencies = "agencies" in unlocked
+            has_restaurants = "restaurants" in unlocked
+            has_emergencies = "emergencies" in unlocked
+            
+            log_test(
+                "Restore: Unlocked contains agencies+restaurants+emergencies",
+                has_agencies and has_restaurants and has_emergencies,
+                f"Unlocked: {unlocked}"
+            )
+        
+        # Get admin list
+        resp = await client.get(
+            f"{BASE_URL}/admin/manual-access",
+            headers={"X-Admin-Key": ADMIN_KEY}
+        )
+        
+        if resp.status_code != 200:
+            log_test("Restore: GET after restore", False, f"Status: {resp.status_code}")
+            return
+        
+        data = resp.json()
+        items = data["items"]
+        
+        # Count how many times test-list-bug@rapanui.cl appears
+        test_entries = [item for item in items if item.get("email") == "test-list-bug@rapanui.cl"]
+        
+        log_test(
+            "Restore: test-list-bug@rapanui.cl STILL appears exactly once",
+            len(test_entries) == 1,
+            f"Count: {len(test_entries)}, Expected: 1 (restore creates secondary grant but list only counts manual:<email>)"
+        )
+        
+        if test_entries:
+            products = test_entries[0].get("products", [])
+            # Check products are deduplicated
+            has_agencies = "agencies" in products
+            has_restaurants = "restaurants" in products
+            no_duplicates = len(products) == len(set(products))
+            
+            log_test(
+                "Restore: Products still show ['agencies', 'restaurants'] (deduplicated)",
+                has_agencies and has_restaurants and no_duplicates,
+                f"Products: {products}"
+            )
+
+
+async def test_revoke_list_updates():
+    """Test 6: Revoke → List updates"""
+    print("\n=== TEST 6: Revoke → List Updates ===")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Get initial state
+        resp = await client.get(
+            f"{BASE_URL}/admin/manual-access",
+            headers={"X-Admin-Key": ADMIN_KEY}
+        )
+        initial_total = resp.json()["total"] if resp.status_code == 200 else 0
+        
+        # Revoke test-list-bug@rapanui.cl
+        revoke_body = {"email": "test-list-bug@rapanui.cl"}
+        resp = await client.post(
+            f"{BASE_URL}/admin/manual-access/revoke",
+            json=revoke_body,
+            headers={"X-Admin-Key": ADMIN_KEY}
+        )
+        
+        log_test(
+            "Revoke: POST revoke → 200",
+            resp.status_code == 200,
+            f"Status: {resp.status_code}, Expected: 200"
+        )
+        
+        if resp.status_code == 200:
+            revoke_data = resp.json()
+            deleted_count = revoke_data.get("deleted", 0)
+            log_test(
+                "Revoke: Deleted count > 0",
+                deleted_count > 0,
+                f"Deleted: {deleted_count}"
+            )
+        
+        # Get updated list
+        resp = await client.get(
+            f"{BASE_URL}/admin/manual-access",
+            headers={"X-Admin-Key": ADMIN_KEY}
+        )
+        
+        if resp.status_code != 200:
+            log_test("Revoke: GET after revoke", False, f"Status: {resp.status_code}")
+            return
+        
+        data = resp.json()
+        new_total = data["total"]
+        items = data["items"]
+        
+        # Check total decreased
+        log_test(
+            "Revoke: Total decreased",
+            new_total < initial_total,
+            f"Initial: {initial_total}, New: {new_total}"
+        )
+        
+        # Check test-list-bug@rapanui.cl no longer appears
+        test_entries = [item for item in items if item.get("email") == "test-list-bug@rapanui.cl"]
+        log_test(
+            "Revoke: test-list-bug@rapanui.cl no longer appears",
+            len(test_entries) == 0,
+            f"Count: {len(test_entries)}, Expected: 0"
+        )
+
+
+async def test_sort_order():
+    """Test 7: Sort order - verify items sorted by granted_at descending"""
+    print("\n=== TEST 7: Sort Order ===")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            f"{BASE_URL}/admin/manual-access",
+            headers={"X-Admin-Key": ADMIN_KEY}
+        )
+        
+        if resp.status_code != 200:
+            log_test("Sort: GET request", False, f"Status: {resp.status_code}")
+            return
+        
+        data = resp.json()
+        items = data["items"]
+        
+        if len(items) < 2:
+            log_test(
+                "Sort: Items sorted by granted_at desc",
+                True,
+                f"Only {len(items)} item(s), cannot verify sort order"
+            )
+            return
+        
+        # Check if sorted descending
+        is_sorted = True
+        for i in range(len(items) - 1):
+            current = items[i].get("granted_at", "")
+            next_item = items[i + 1].get("granted_at", "")
+            if current < next_item:
+                is_sorted = False
+                break
+        
+        log_test(
+            "Sort: Items sorted by granted_at descending (most recent first)",
+            is_sorted,
+            f"First: {items[0].get('granted_at')}, Last: {items[-1].get('granted_at')}"
+        )
+
+
+async def test_cleanup():
+    """Test 8: Cleanup - revoke test-bind@rapanui.cl"""
+    print("\n=== TEST 8: Cleanup ===")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Revoke test-bind@rapanui.cl
+        revoke_body = {"email": "test-bind@rapanui.cl"}
+        resp = await client.post(
+            f"{BASE_URL}/admin/manual-access/revoke",
+            json=revoke_body,
+            headers={"X-Admin-Key": ADMIN_KEY}
+        )
+        
+        log_test(
+            "Cleanup: Revoke test-bind@rapanui.cl → 200",
+            resp.status_code == 200,
+            f"Status: {resp.status_code}, Expected: 200"
+        )
+        
+        # Verify final state
+        resp = await client.get(
+            f"{BASE_URL}/admin/manual-access",
+            headers={"X-Admin-Key": ADMIN_KEY}
+        )
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            items = data["items"]
+            
+            # Check only antuaji@gmail.com remains
+            emails = [item.get("email") for item in items]
+            only_antuaji = all(email == "antuaji@gmail.com" for email in emails)
+            
+            log_test(
+                "Cleanup: Only antuaji@gmail.com grant remains",
+                only_antuaji or len(items) == 1,
+                f"Emails: {emails}"
+            )
+            
+            print(f"\n📊 Final state: Total={data['total']}, Items count={len(items)}")
+            for item in items:
+                print(f"  - {item.get('email')}: products={item.get('products')}")
 
 
 async def main():
     """Run all tests"""
-    print("\n" + "="*80)
-    print("ADMIN AUTHENTICATION MASTER KEY RECOVERY - TEST SUITE")
-    print("Testing bug fix: Master key RAPANUI-2026 should ALWAYS work")
-    print("="*80)
+    print("=" * 80)
+    print("BACKEND TEST: /api/admin/manual-access GET endpoint bug fix")
+    print("=" * 80)
+    print(f"Backend URL: {BASE_URL}")
+    print(f"Admin Key: {ADMIN_KEY}")
+    print("=" * 80)
     
     try:
-        # Run all test scenarios
-        await test_1_initial_state_default_key()
-        await test_2_change_password_to_custom()
-        await test_3_master_key_recovery()
-        await test_4_other_admin_routes_accept_both_keys()
-        await test_5_password_change_validation()
-        await test_6_restore_default_state()
+        # Run all tests in sequence
+        await test_auth_checks()
+        await test_baseline_state()
+        await test_grant_list_verify()
+        await test_grant_with_bind_device()
+        await test_client_restore_no_double_count()
+        await test_revoke_list_updates()
+        await test_sort_order()
+        await test_cleanup()
         
-        # Summary
-        print("\n" + "="*80)
+        # Print summary
+        print("\n" + "=" * 80)
         print("TEST SUMMARY")
-        print("="*80)
+        print("=" * 80)
+        print(f"Total tests: {tests_passed + tests_failed}")
+        print(f"✅ Passed: {tests_passed}")
+        print(f"❌ Failed: {tests_failed}")
+        print("=" * 80)
         
-        passed_count = sum(1 for t in test_results if t["passed"])
-        total_count = len(test_results)
-        
-        print(f"\nTotal: {passed_count}/{total_count} tests passed")
-        
-        if passed_count == total_count:
-            print("\n✅ ALL TESTS PASSED - Master key recovery is working correctly!")
-            print("   The master key RAPANUI-2026 ALWAYS works, even after password changes.")
-            return 0
-        else:
-            print(f"\n❌ {total_count - passed_count} TESTS FAILED")
+        if tests_failed > 0:
+            print("\n❌ SOME TESTS FAILED")
             print("\nFailed tests:")
-            for t in test_results:
-                if not t["passed"]:
-                    print(f"  - {t['name']}")
-                    if t["details"]:
-                        print(f"    {t['details']}")
-            return 1
+            for result in test_results:
+                if "❌ FAIL" in result:
+                    print(result)
+            sys.exit(1)
+        else:
+            print("\n✅ ALL TESTS PASSED")
+            sys.exit(0)
     
     except Exception as e:
-        print(f"\n❌ CRITICAL ERROR: {e}")
+        print(f"\n❌ TEST EXECUTION ERROR: {e}")
         import traceback
         traceback.print_exc()
-        return 1
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    exit_code = asyncio.run(main())
-    sys.exit(exit_code)
+    asyncio.run(main())

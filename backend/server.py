@@ -742,14 +742,29 @@ async def admin_revoke_manual_access(body: RevokeAccessRequest, request: Request
 @api_router.get("/admin/manual-access")
 async def admin_list_manual_access(request: Request):
     await _check_admin(request)
-    grants = await db.access_grants.find({"source": "manual"}, {"_id": 0}).sort("granted_at", -1).to_list(500)
-    # agrupar por email
+    # Sólo considerar los grants "fuente de verdad" (device_id que empieza con
+    # "manual:<email>") para evitar contar duplicados cuando el cliente ya hizo
+    # restore o cuando se aplicó también al dispositivo del dueño.
+    grants = await db.access_grants.find(
+        {"source": "manual", "device_id": {"$regex": "^manual:"}},
+        {"_id": 0},
+    ).sort("granted_at", -1).to_list(500)
+    # agrupar por email (deduplicando productos)
     by_email: dict = {}
     for g in grants:
         e = g.get("email", "")
-        by_email.setdefault(e, {"email": e, "products": [], "note": g.get("note", ""), "granted_at": g.get("granted_at")})
-        by_email[e]["products"].append(g["product_id"])
-    return {"items": list(by_email.values()), "total": len(by_email)}
+        entry = by_email.setdefault(
+            e,
+            {"email": e, "products": [], "note": g.get("note", ""), "granted_at": g.get("granted_at")},
+        )
+        pid = g.get("product_id")
+        if pid and pid not in entry["products"]:
+            entry["products"].append(pid)
+        # conservar la fecha más reciente
+        if g.get("granted_at") and (not entry["granted_at"] or g["granted_at"] > entry["granted_at"]):
+            entry["granted_at"] = g["granted_at"]
+    items = sorted(by_email.values(), key=lambda x: x.get("granted_at") or "", reverse=True)
+    return {"items": items, "total": len(items)}
 
 
 # --- Rutas (read-only para admin) ---
