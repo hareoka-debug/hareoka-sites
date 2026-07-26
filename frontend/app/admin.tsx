@@ -414,19 +414,54 @@ function AccesoTab({ adminKey, bottomInset }: { adminKey: string; bottomInset: n
   const toggle = (id: string) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
   const selectAll = () => setSelected(products.map((p) => p.id));
 
+  const [shareCard, setShareCard] = useState<{ email: string; products: string[] } | null>(null);
+
   const grant = async () => {
     setMsg(null);
+    setShareCard(null);
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) { setMsg({ ok: false, text: "Email inválido" }); return; }
     if (selected.length === 0) { setMsg({ ok: false, text: "Elige al menos 1 producto" }); return; }
     setSaving(true);
     try {
-      await adminGrantManual(adminKey, email.trim(), selected, note.trim());
-      setMsg({ ok: true, text: `✓ Acceso concedido a ${email.trim()}` });
+      const emailTrim = email.trim();
+      const selectedCopy = [...selected];
+      await adminGrantManual(adminKey, emailTrim, selectedCopy, note.trim());
+      setMsg({ ok: true, text: `✓ Acceso concedido a ${emailTrim}` });
+      setShareCard({ email: emailTrim, products: selectedCopy });
       setEmail(""); setSelected([]); setNote("");
       await load();
     } catch (e: any) {
       setMsg({ ok: false, text: e?.message || "Error" });
     } finally { setSaving(false); }
+  };
+
+  const buildClientMessage = (data: { email: string; products: string[] }) => {
+    const names = data.products
+      .map((pid) => products.find((p) => p.id === pid)?.name || pid)
+      .filter(Boolean);
+    const list = names.length > 1 ? names.slice(0, -1).join(", ") + " y " + names[names.length - 1] : names[0];
+    const origin = typeof window !== "undefined" && window.location ? window.location.origin : "https://rapa-nui-routes-1.preview.emergentagent.com";
+    return `¡Hola! Ya tienes acceso a ${list} en la app Descubre Rapa Nui.\n\nEntra a: ${origin}\n\n1) Toca "¿Ya pagaste antes? Restaurar acceso con tu email"\n2) Escribe: ${data.email}\n3) Toca "Verificar y entrar"\n\n¡Listo! Podrás usar tu acceso en el dispositivo desde donde entres.`;
+  };
+
+  const copyClientMessage = async () => {
+    if (!shareCard) return;
+    const text = buildClientMessage(shareCard);
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+        setMsg({ ok: true, text: "✓ Mensaje copiado. Pégalo en WhatsApp al cliente." });
+      }
+    } catch {
+      setMsg({ ok: false, text: "No se pudo copiar. Selecciona y copia manualmente." });
+    }
+  };
+
+  const openWhatsAppShare = () => {
+    if (!shareCard) return;
+    const text = encodeURIComponent(buildClientMessage(shareCard));
+    const url = `https://wa.me/?text=${text}`;
+    if (typeof window !== "undefined") window.open(url, "_blank");
   };
 
   const revoke = async () => {
@@ -507,6 +542,33 @@ function AccesoTab({ adminKey, bottomInset }: { adminKey: string; bottomInset: n
         >
           {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.grantBtnText}>Conceder acceso</Text>}
         </Pressable>
+
+        {shareCard && (
+          <View style={styles.shareCard}>
+            <Text style={styles.shareTitle}>📩 ¿Cómo entrega el cliente?</Text>
+            <Text style={styles.shareBody}>
+              El acceso ya está guardado. Ahora **envía este mensaje al cliente** por WhatsApp o email para que pueda entrar:
+            </Text>
+            <View style={styles.shareBox}>
+              <Text style={styles.sharePreview} selectable>
+                {buildClientMessage(shareCard)}
+              </Text>
+            </View>
+            <View style={styles.shareBtnRow}>
+              <Pressable style={styles.shareBtnPrimary} onPress={openWhatsAppShare}>
+                <Feather name="message-circle" size={16} color="#FFF" />
+                <Text style={styles.shareBtnPrimaryText}>Compartir por WhatsApp</Text>
+              </Pressable>
+              <Pressable style={styles.shareBtnSecondary} onPress={copyClientMessage}>
+                <Feather name="copy" size={16} color={colors.brand} />
+                <Text style={styles.shareBtnSecondaryText}>Copiar mensaje</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.shareFoot}>
+              ⚠️ Sin este paso, el cliente NO puede entrar aunque le hayas otorgado acceso. Debe usar "Restaurar acceso con tu email" dentro de la app.
+            </Text>
+          </View>
+        )}
         <Text style={styles.totalLine}>Total accesos concedidos manualmente: {total}</Text>
 
         <Pressable onPress={revoke} style={styles.revokeBtn}>
@@ -783,6 +845,41 @@ const styles = StyleSheet.create({
   msgBoxOk: { backgroundColor: "#E8F5E9", borderColor: colors.success },
   msgBoxErr: { backgroundColor: "#FFEBEE", borderColor: colors.error },
   msgBoxText: { flex: 1, fontSize: 13, fontWeight: "600" },
+  shareCard: {
+    marginTop: spacing.lg,
+    backgroundColor: "#FFF7ED",
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    borderWidth: 2,
+    borderColor: colors.warning,
+    gap: spacing.sm,
+  },
+  shareTitle: { fontFamily: serif, fontSize: 17, color: colors.onSurface },
+  shareBody: { fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 19 },
+  shareBox: {
+    backgroundColor: "#FFF",
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+  },
+  sharePreview: { fontSize: 12, color: colors.onSurface, lineHeight: 18 },
+  shareBtnRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm, flexWrap: "wrap" },
+  shareBtnPrimary: {
+    flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center",
+    backgroundColor: "#25D366", borderRadius: radius.pill,
+    paddingHorizontal: 16, paddingVertical: 12, minHeight: 44, flex: 1,
+  },
+  shareBtnPrimaryText: { color: "#FFF", fontWeight: "700", fontSize: 13 },
+  shareBtnSecondary: {
+    flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center",
+    backgroundColor: "#FFF", borderRadius: radius.pill,
+    paddingHorizontal: 16, paddingVertical: 12, minHeight: 44,
+    borderWidth: 1.5, borderColor: colors.brand, flex: 1,
+  },
+  shareBtnSecondaryText: { color: colors.brand, fontWeight: "700", fontSize: 13 },
+  shareFoot: { fontSize: 11, color: colors.error, fontWeight: "600", marginTop: spacing.sm },
   checkRow: {
     flexDirection: "row", gap: 10, alignItems: "center",
     paddingVertical: spacing.md, paddingHorizontal: spacing.md,
