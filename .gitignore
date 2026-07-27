@@ -27,8 +27,7 @@ next-env.d.ts
 
 # Production builds
 /build
-dist/
-dist
+# dist/ intentionally NOT ignored so the deployed backend can serve the Expo web bundle.
 
 # Environment files (comprehensive coverage)
 

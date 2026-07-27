@@ -1001,8 +1001,37 @@ app.add_middleware(
 # expo-router client-side routing works.
 # ---------------------------------------------------------------------------
 from fastapi.staticfiles import StaticFiles  # noqa: E402
+import subprocess  # noqa: E402
+import shutil  # noqa: E402
 
 _DIST_DIR = Path("/app/frontend/dist")
+_FRONTEND_DIR = Path("/app/frontend")
+
+def _ensure_web_bundle():
+    """If the web bundle isn't in the deploy snapshot, build it on first boot.
+    Best-effort: any failure is logged but does not crash the API."""
+    if (_DIST_DIR / "index.html").exists():
+        return
+    if not _FRONTEND_DIR.exists():
+        return
+    npx = shutil.which("npx") or "/usr/bin/npx"
+    if not Path(npx).exists():
+        print(f"[web-bundle] npx not found at {npx}; skipping build")
+        return
+    print("[web-bundle] dist/ missing, running `expo export -p web` (this may take 1-2 min)...")
+    try:
+        subprocess.run(
+            [npx, "expo", "export", "-p", "web"],
+            cwd=str(_FRONTEND_DIR),
+            check=True,
+            timeout=300,
+        )
+        print("[web-bundle] build complete")
+    except Exception as e:  # pragma: no cover
+        print(f"[web-bundle] build failed: {e}")
+
+_ensure_web_bundle()
+
 if _DIST_DIR.exists():
     # Mount ALL expo-generated asset folders (Metro/Expo may output several).
     for _sub in ("assets", "_expo", "static"):
