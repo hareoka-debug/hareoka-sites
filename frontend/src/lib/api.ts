@@ -1,6 +1,16 @@
+import { Platform } from "react-native";
 import { storage } from "@/src/utils/storage";
 
-const BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
+// En web (producción o cualquier dominio) usamos el origin actual para que
+// las peticiones a /api/* funcionen automáticamente sin importar en qué
+// dominio esté desplegada la app. En nativo (iOS/Android) usamos la variable
+// de entorno EXPO_PUBLIC_BACKEND_URL que apunta al backend accesible.
+const BASE: string | undefined = (() => {
+  if (Platform.OS === "web" && typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
+  }
+  return process.env.EXPO_PUBLIC_BACKEND_URL;
+})();
 
 export interface Poi {
   name: string;

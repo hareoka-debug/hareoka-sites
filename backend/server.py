@@ -993,6 +993,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------------------------------------------------------------------
+# Serve the Expo web bundle (production).
+# In dev/preview, Metro serves the SPA on port 3000; in production the
+# frontend gets built with `npx expo export -p web` producing /app/frontend/dist.
+# We mount the static assets and add a catch-all that returns index.html so
+# expo-router client-side routing works.
+# ---------------------------------------------------------------------------
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+_DIST_DIR = Path("/app/frontend/dist")
+if _DIST_DIR.exists():
+    # Mount ALL expo-generated asset folders (Metro/Expo may output several).
+    for _sub in ("assets", "_expo", "static"):
+        _p = _DIST_DIR / _sub
+        if _p.exists():
+            app.mount(f"/{_sub}", StaticFiles(directory=str(_p)), name=_sub)
+
+    # Serve favicon and other root-level static files directly.
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def _favicon():
+        for name in ("favicon.ico", "favicon.png"):
+            fp = _DIST_DIR / name
+            if fp.exists():
+                return FileResponse(str(fp))
+        raise HTTPException(status_code=404)
+
+    # SPA catch-all: MUST be declared AFTER include_router so /api/* is not intercepted.
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def _spa_catch_all(full_path: str):
+        # Never intercept API paths (defense in depth).
+        if full_path.startswith("api/") or full_path.startswith("api"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        # If the request is for a real static file inside dist/, serve it.
+        target = _DIST_DIR / full_path
+        if full_path and target.is_file():
+            return FileResponse(str(target))
+        # Otherwise return index.html so expo-router handles the route client-side.
+        index_html = _DIST_DIR / "index.html"
+        if index_html.exists():
+            return FileResponse(str(index_html))
+        raise HTTPException(status_code=404, detail="Frontend build not found")
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
